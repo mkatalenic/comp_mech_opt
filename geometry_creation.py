@@ -18,6 +18,9 @@ class Mesh:
     node_array                 = np.empty(shape=(0,2),
                                           dtype=np.float64)
 
+    main_node_array            = np.empty(shape=(0),
+                                          dtype=int)
+
     last_added_node_index: int = -1
 
     # Definiranje array-a u koji se spremaju pojedine grede
@@ -37,6 +40,17 @@ class Mesh:
                                     tmp_node_array,
                                     axis=0)
         self.last_added_node_index += 1
+
+    def create_main_node(self,
+                         coords: npt.ArrayLike):
+        '''
+        Kreacija i zapisivanje glavnih čvorova
+        '''
+        self.create_node(coords)
+        self.main_node_array = np.append(
+            self.main_node_array,
+            self.last_added_node_index
+        )
 
     def create_segmentedbeam(self,
                              first_node: int,
@@ -68,3 +82,31 @@ class Mesh:
             segbeam_beams.reshape((1,self.segmentedbeam_divisions,3)),
             axis=0
         )
+
+
+class SimpleMeshCreator(Mesh):
+    '''
+    Jednostavna kreacija mreže na temelju početnih parametara
+    '''
+
+    def __init__(self,
+                 l: float,
+                 h: float,
+                 nl: int,
+                 nh: int,
+                 sb: str = None):
+        '''
+        Kreiranje jednostavne mreže
+        '''
+
+if __name__ == '__main__':
+    my_mesh = Mesh()
+    my_mesh.create_main_node((0,0))
+    my_mesh.create_main_node((1,1))
+    my_mesh.create_segmentedbeam(0,1)
+    my_mesh.create_main_node((2,2))
+    my_mesh.create_segmentedbeam(0,2)
+
+    print(my_mesh.main_node_array)
+    print(my_mesh.node_array)
+    print(my_mesh.segmentedbeam_array)
