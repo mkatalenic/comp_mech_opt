@@ -68,18 +68,3 @@ class Mesh:
             segbeam_beams.reshape((1,self.segmentedbeam_divisions,3)),
             axis=0
         )
-
-
-
-if __name__ == '__main__':
-    moj_mesh = Mesh()
-    moj_mesh.create_node((0,0))
-    moj_mesh.create_node((1,1))
-    moj_mesh.create_node((2,2))
-    moj_mesh.create_node((3,3))
-
-    moj_mesh.create_segmentedbeam(0,1)
-    moj_mesh.create_segmentedbeam(1,2)
-    moj_mesh.create_segmentedbeam(0,3)
-
-    print(moj_mesh.segmentedbeam_array)
