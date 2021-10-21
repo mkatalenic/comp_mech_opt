@@ -21,6 +21,9 @@ class Mesh:
     main_node_array            = np.empty(shape=(0),
                                           dtype=int)
 
+    outer_node_array           = np.empty(shape=(0),
+                                          dtype=int)
+
     last_added_node_index: int = -1
 
     # Definiranje array-a u koji se spremaju pojedine grede
@@ -101,6 +104,11 @@ class SimpleMeshCreator(Mesh):
             for horizontal_coord in np.linspace(0, length, divisions[1] + 1, endpoint=True):
                 self.create_main_node((horizontal_coord, vertical_coord))
 
+                if horizontal_coord in (0, length) or vertical_coord in (0, height):
+                    self.outer_node_array = np.append(self.outer_node_array,
+                                                      self.main_node_array[
+                                                          self.last_added_node_index])
+
         for y_node in range(divisions[1] + 1):
             for x_node in range(divisions[0] + 1):
                 current_node_id = x_node + y_node*(divisions[0] + 1)
@@ -141,8 +149,9 @@ class SimpleMeshCreator(Mesh):
                                               current_node_id + 1)
 
 if __name__ == '__main__':
-    my_mesh = SimpleMeshCreator(2, 2, (2, 2), 'x')
+    my_mesh = SimpleMeshCreator(2, 2, (10, 10), 'x')
 
-    print(my_mesh.main_node_array)
-    print(my_mesh.node_array)
-    print(my_mesh.segmentedbeam_array)
+    # print(my_mesh.main_node_array)
+    # print(my_mesh.node_array)
+    # print(my_mesh.segmentedbeam_array)
+    # print(my_mesh.outer_node_array)
