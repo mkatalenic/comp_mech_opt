@@ -90,22 +90,58 @@ class SimpleMeshCreator(Mesh):
     '''
 
     def __init__(self,
-                 l: float,
-                 h: float,
-                 nl: int,
-                 nh: int,
-                 sb: str = None):
+                 length: float,
+                 height: float,
+                 divisions: tuple[int, int],
+                 support_definition: str = None):
         '''
         Kreiranje jednostavne mreže
         '''
+        for vertical_coord in np.linspace(0, height, divisions[0] + 1, endpoint=True):
+            for horizontal_coord in np.linspace(0, length, divisions[1] + 1, endpoint=True):
+                self.create_main_node((horizontal_coord, vertical_coord))
+
+        for y_node in range(divisions[1] + 1):
+            for x_node in range(divisions[0] + 1):
+                current_node_id = x_node + y_node*(divisions[0] + 1)
+
+                if x_node < divisions[0]:
+                    self.create_segmentedbeam(current_node_id,
+                                              current_node_id + 1)
+                if y_node < divisions[1]:
+                    self.create_segmentedbeam(current_node_id,
+                                              current_node_id + (divisions[0] + 1))
+
+                if support_definition == 'fd' and y_node < divisions[1] and x_node < divisions[0]:
+                    self.create_segmentedbeam(current_node_id,
+                                              current_node_id + 1 + (divisions[0] + 1))
+
+                if support_definition == 'bd' and y_node < divisions[1] and x_node > 0:
+                    self.create_segmentedbeam(current_node_id,
+                                              current_node_id - 1 + (divisions[0] + 1))
+
+                if support_definition == 'x' and y_node < divisions[1] and x_node < divisions[0]:
+                    self.create_node(
+                        np.average(
+                            self.node_array[[current_node_id,
+                                             current_node_id + 1 + (divisions[0] + 1)],:],
+                            axis=0
+                        )
+                    )
+
+                    created_mid_node_index = self.last_added_node_index
+
+                    self.create_segmentedbeam(current_node_id,
+                                              created_mid_node_index)
+                    self.create_segmentedbeam(created_mid_node_index,
+                                              current_node_id + 1 + (divisions[0] + 1))
+                    self.create_segmentedbeam(current_node_id + (divisions[0] + 1),
+                                              created_mid_node_index)
+                    self.create_segmentedbeam(created_mid_node_index,
+                                              current_node_id + 1)
 
 if __name__ == '__main__':
-    my_mesh = Mesh()
-    my_mesh.create_main_node((0,0))
-    my_mesh.create_main_node((1,1))
-    my_mesh.create_segmentedbeam(0,1)
-    my_mesh.create_main_node((2,2))
-    my_mesh.create_segmentedbeam(0,2)
+    my_mesh = SimpleMeshCreator(2, 2, (2, 2), 'x')
 
     print(my_mesh.main_node_array)
     print(my_mesh.node_array)
