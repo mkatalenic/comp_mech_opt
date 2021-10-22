@@ -12,6 +12,8 @@ class Mesh:
     Sadrži metode kreacije mreže.
     '''
 
+    material = (1.6e9, 3e-1)
+
     segmentedbeam_divisions: int = 4
 
     # Definiranje array-a u koji se spremaju koordinate čvorova
