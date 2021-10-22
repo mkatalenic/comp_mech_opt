@@ -26,7 +26,7 @@ def create_calculix_inputfile(used_mesh,
             ccx_input_file.write(f'*element, type=b32, elset=b_{index}\n')
             ccx_input_file.writelines(
                 [f'{i + 1 + index * used_mesh.segmentedbeam_divisions}, \
-                {np.array2string(row, separator=",")[1:-1]}\n'
+                {np.array2string(row + 1, separator=",")[1:-1]}\n'
                  for i, row in enumerate(segbeam)]
             )
 
