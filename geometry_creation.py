@@ -88,6 +88,24 @@ class Mesh:
             axis=0
         )
 
+    def fetch_near_main_node_index(self,
+                                   coords: npt.ArrayLike) -> int:
+        '''Dohvaća točku u blizini definiranih koordinata'''
+
+        coords = np.array(coords)
+        closest_node_index = np.argmin(
+            np.abs(
+                self.node_array[self.main_node_array] \
+                - np.repeat(coords, np.size(self.main_node_array), axis=0)
+            ), axis = 0
+        )
+
+        return self.main_node_array[closest_node_index]
+
+    def fetch_main_nodes_inside_area(self,
+                                     *args):
+        '''Dohvaća indexe glavnik čvorova unutar poligona'''
+        pass
 
 class SimpleMeshCreator(Mesh):
     '''

@@ -3,6 +3,7 @@
 Program koji pokreće Dash interface uz interaktivno pokretanje, kreaciju, dodavanje
 '''
 
+import subprocess
 from datetime import datetime as dt
 import numpy as np
 import geometry_creation as gc
@@ -41,10 +42,6 @@ def create_calculix_inputfile(used_mesh,
         ccx_input_file.writelines([f'{i + 1}, 1,4,5\n' for i in range(used_mesh.last_added_node_index + 1)])
 
     return file_name
-
-def start_calculix_simulation(file_name: str):
-    pass
-
 
 if __name__=='__main__':
     my_mesh = gc.SimpleMeshCreator(10, 10, (10,10), 'x')
