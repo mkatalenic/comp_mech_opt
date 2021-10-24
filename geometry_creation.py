@@ -120,8 +120,8 @@ class SimpleMeshCreator(Mesh):
         '''
         Kreiranje jednostavne mreže
         '''
-        for vertical_coord in np.linspace(0, height, divisions[0] + 1, endpoint=True):
-            for horizontal_coord in np.linspace(0, length, divisions[1] + 1, endpoint=True):
+        for vertical_coord in np.linspace(0, height, divisions[1] + 1, endpoint=True):
+            for horizontal_coord in np.linspace(0, length, divisions[0] + 1, endpoint=True):
                 self.create_main_node((horizontal_coord, vertical_coord))
 
                 if horizontal_coord in (0, length) or vertical_coord in (0, height):
