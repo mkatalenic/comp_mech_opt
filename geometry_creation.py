@@ -12,7 +12,7 @@ class Mesh:
     Sadrži metode kreacije mreže.
     '''
 
-    material = (1.6e9, 3e-1)
+    material: tuple
 
     segmentedbeam_divisions: int = 4
 
@@ -88,19 +88,6 @@ class Mesh:
             axis=0
         )
 
-    def fetch_near_main_node_index(self,
-                                   coords: npt.ArrayLike) -> int:
-        '''Dohvaća točku u blizini definiranih koordinata'''
-
-        coords = np.array(coords)
-        closest_node_index = np.argmin(
-            np.abs(
-                self.node_array[self.main_node_array] \
-                - np.repeat(coords, np.size(self.main_node_array), axis=0)
-            ), axis = 0
-        )
-
-        return self.main_node_array[closest_node_index]
 
     def fetch_main_nodes_inside_area(self,
                                      *args):
@@ -167,6 +154,84 @@ class SimpleMeshCreator(Mesh):
                                               created_mid_node_index)
                     self.create_segmentedbeam(created_mid_node_index,
                                               current_node_id + 1)
+
+    '''
+   ----------------------------------------------------------------------------------------------------
+    Definiranje početnih uvjeta mreže
+   ----------------------------------------------------------------------------------------------------
+    '''
+
+    # Lista tuplova koji spremaju broj node_a i oblik oslonca
+    boundary_list: list[tuple[int, int]] = []
+    force_list: list[tuple[int, npt.NDArray]] = []
+
+    def make_boundary(self,
+                     node_def,
+                     boundary_type: int):
+        '''Definiranje novog oslonca na temelju tipa'''
+        if  isinstance(node_def, int):
+            node_id = node_def
+        else:
+            node_id = fetch_near_main_node_index(self,
+                                                 node_def)
+
+        if boundary_type in [1,2,3]:
+            if boundary_type == 3:
+                boundary_type = 6
+            self.boundary_list.append((node_id, boundary_type))
+        else:
+            raise ValueError
+
+    def make_force(self,
+                   node_def,
+                   force_vec: npt.ArrayLike):
+        '''Definiranje nove sile na temelju vektorskog zapisa'''
+        if  isinstance(node_def, int):
+            node_id = node_def
+        else:
+            node_id = fetch_near_main_node_index(self,
+                                                 node_def)
+
+        force_vec = np.array(force_vec)
+        self.force_list.append((node_id, force_vec))
+
+    '''
+    ----------------------------------------------------------------------------------------------------
+    WIDTH DEFINITION
+    ----------------------------------------------------------------------------------------------------
+    '''
+    segmentedbeam_width_array = np.empty(shape=(0),
+                                         dtype=float)
+    segmentedbeam_height: float
+    segmentedbeam_initial_width: float
+
+    def set_width_array(self,
+                        width: float):
+        '''Jednostavna definicija početnih uvjeta'''
+        self.segmentedbeam_width_array = np.ones(np.shape(self.segmentedbeam_array)[0]) * width
+
+
+def fetch_near_main_node_index(selected_mesh: Mesh,
+                               coords: npt.ArrayLike) -> int:
+    '''Dohvaća točku u blizini definiranih koordinata'''
+
+    coords = np.array(coords)
+    closest_node_index = 1 + np.argmin(
+        np.sqrt(
+            np.sum(
+                np.square(
+                    selected_mesh.node_array[selected_mesh.main_node_array] \
+                    - np.repeat(coords.reshape((1,2)), np.size(selected_mesh.main_node_array), axis=0)
+                ), axis=1
+            )
+        ), axis = 0
+    )
+
+    return closest_node_index
+
+class StartingConditions:
+    '''Različiti početni uvjeti simulacije'''
+
 
 if __name__ == '__main__':
     my_mesh = SimpleMeshCreator(2, 2, (10, 10), 'x')
