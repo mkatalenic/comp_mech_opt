@@ -1,19 +1,28 @@
 #!/usr/bin/env python3
 '''
-Program koji pokreće Dash interface uz interaktivno pokretanje, kreaciju, dodavanje
+Postavljanje input datoteke za Calculix
+Pokretanje Calculixa
 '''
 
-import subprocess
 from datetime import datetime as dt
+
+import re
+import subprocess
+import os
+import shutil
+
 import numpy as np
+
 import geometry_creation as gc
 
 def create_calculix_inputfile(used_mesh,
-                              file_name: str = dt.now().strftime('mesh_%d_%M_%H%M%S')) -> str:
+                              filename: str = dt.now().strftime('mesh_%d_%M_%H%M%S'),
+                              nonlin: bool = True) -> str:
     '''Metoda ispisa mreže u input_file'''
 
+    os.mkdir(filename)
 
-    with open(file_name + '.inp', 'w', encoding='ascii') as ccx_input_file:
+    with open(filename + '/' + filename + '.inp', 'w', encoding='ascii') as ccx_input_file:
 
         # Definicija čvorova
         ccx_input_file.write('*node, nset=nall\n')
@@ -60,7 +69,10 @@ def create_calculix_inputfile(used_mesh,
 
 
         # Postavljanje sila
-        ccx_input_file.write('*step\n*static\n*cload\n')
+        if nonlin:
+            ccx_input_file.write('*step, nlgeom\n*static\n*cload\n')
+        else:
+            ccx_input_file.write('*step\n*static\n*cload\n')
         for (node_id, force) in used_mesh.force_list:
             out_x_force_string = f'{node_id}, 1, {force[0]}\n'
             out_y_force_string = f'{node_id}, 2, {force[1]}\n'
@@ -74,20 +86,74 @@ def create_calculix_inputfile(used_mesh,
         ccx_input_file.write('*node file, output=2d, nset=nall\nu\n')
         ccx_input_file.write('*el file, elset=elall\ns,noe\n')
         ccx_input_file.write('*el print, nset=nall\nevol\n')
-        # ccx_input_file.write('*node print, nset=nall\nu,rf\n')
         ccx_input_file.write('*end step')
 
+    return filename
 
+def output_string_formatter(output_string: str):
+    '''Vraća potrebni format ispisa'''
+    exponentials = re.split('E', output_string)[1:]
+    output_numbers = re.split('E...',output_string)[:-1]
 
-    return file_name
+    output_numbers = [float(num) * 10**float(exp[:3])
+                      for num,exp in zip(output_numbers,exponentials)]
+
+    return output_numbers
+
+def read_node_displacement_and_stress(filename: str):
+    '''Čitanje pomaka pojedinih čvorova mreže'''
+
+    with open(filename + '.frd', 'r', encoding='utf8') as results_file:
+        displacement_list = []
+        stress_list = []
+
+        in_disp_section = False
+        in_stress_section = False
+        for line in results_file:
+
+            if line[5:].startswith('DISP'):
+                in_disp_section = True
+
+            if line[5:].startswith('STRESS'):
+                in_stress_section = True
+
+            if line.startswith(' -3'):
+                in_disp_section = False
+                in_stress_section = False
+
+            if in_disp_section:
+                displacement_list.append(output_string_formatter(line.strip()[12:]))
+
+            if in_stress_section:
+                stress_list.append(output_string_formatter(line.strip()[12:]))
+
+    stress_array = np.array(stress_list[7:])
+    displacement_array = np.array(displacement_list[5:])
+
+    return displacement_array, stress_array
+
+def run_ccx(filename: str,
+            del_dir: bool = False):
+    '''Pokretanje rješavaća, output su disp i stress'''
+    os.chdir(filename)
+    subprocess.run(['ccx', filename.strip(".inp")], check=True)
+    disp, stress = read_node_displacement_and_stress(filename)
+    os.chdir('..')
+
+    if del_dir:
+        shutil.rmtree(filename)
+
+    return disp, stress
 
 if __name__=='__main__':
-    max_x = 1
-    max_y = 1
+    max_x = 1.52
+    max_y = 3.24
     my_mesh = gc.SimpleMeshCreator(max_x, max_y, (10,10), 'x')
 
-    my_mesh.make_boundary((0,0), 1)
-    my_mesh.make_boundary((0,0), 2)
+    # my_mesh = gc.ReadGMSH
+
+    # my_mesh.make_boundary((0,0), 1)
+    # my_mesh.make_boundary((0,0), 2)
 
     my_mesh.make_boundary((max_x,0), 1)
     my_mesh.make_boundary((max_x,0), 2)
@@ -98,14 +164,16 @@ if __name__=='__main__':
     my_mesh.make_boundary((0,max_y), 1)
     my_mesh.make_boundary((0,max_y), 2)
 
-    # my_mesh.make_force((max_x/2, 0), (0,1))
-    my_mesh.make_force((max_x/2, max_y/2), (1,1))
+    my_mesh.make_force((max_x/2, 0), (0, 1000))
+    my_mesh.make_force((0.25, 0.5), (-1500,-1000))
 
-    my_mesh.material = (1e7, 0.3)
+    my_mesh.material = (1e5, 0.29)
 
-    my_mesh.segmentedbeam_height = 1e-2
-    my_mesh.segmentedbeam_initial_width = 1e-2
+    my_mesh.segmentedbeam_height = 0.25
+    my_mesh.segmentedbeam_initial_width = 0.25
 
     my_mesh.set_width_array(my_mesh.segmentedbeam_initial_width)
 
     current_mesh_filename = create_calculix_inputfile(my_mesh)
+
+    run_ccx(current_mesh_filename, del_dir=True)

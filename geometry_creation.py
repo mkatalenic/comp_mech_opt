@@ -203,12 +203,17 @@ class SimpleMeshCreator(Mesh):
     segmentedbeam_width_array = np.empty(shape=(0),
                                          dtype=float)
     segmentedbeam_height: float
-    segmentedbeam_initial_width: float
 
     def set_width_array(self,
-                        width: float):
+                        width):
         '''Jednostavna definicija početnih uvjeta'''
-        self.segmentedbeam_width_array = np.ones(np.shape(self.segmentedbeam_array)[0]) * width
+        if isinstance(width, float):
+            self.segmentedbeam_width_array = np.ones(np.shape(self.segmentedbeam_array)[0]) * width
+        elif isinstance(width, npt.ArrayLike):
+            if np.size(width) != np.shape(self.segmentedbeam_array)[0]:
+                raise ValueError
+            else:
+                self.segmentedbeam_width_array = width
 
 
 def fetch_near_main_node_index(selected_mesh: Mesh,
