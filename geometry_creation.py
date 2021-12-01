@@ -88,12 +88,6 @@ class Mesh:
             axis=0
         )
 
-
-    def fetch_main_nodes_inside_area(self,
-                                     *args):
-        '''Dohvaća indexe glavnik čvorova unutar poligona'''
-        pass
-
 class SimpleMeshCreator(Mesh):
     '''
     Jednostavna kreacija mreže na temelju početnih parametara
@@ -136,7 +130,7 @@ class SimpleMeshCreator(Mesh):
                                               current_node_id - 1 + (divisions[0] + 1))
 
                 if support_definition == 'x' and y_node < divisions[1] and x_node < divisions[0]:
-                    self.create_node(
+                    self.create_main_node(
                         np.average(
                             self.node_array[[current_node_id,
                                              current_node_id + 1 + (divisions[0] + 1)],:],
@@ -221,7 +215,7 @@ def fetch_near_main_node_index(selected_mesh: Mesh,
     '''Dohvaća točku u blizini definiranih koordinata'''
 
     coords = np.array(coords)
-    closest_node_index = 1 + np.argmin(
+    closest_node_index = np.argmin(
         np.sqrt(
             np.sum(
                 np.square(
@@ -233,10 +227,6 @@ def fetch_near_main_node_index(selected_mesh: Mesh,
     )
 
     return closest_node_index
-
-class StartingConditions:
-    '''Različiti početni uvjeti simulacije'''
-
 
 if __name__ == '__main__':
     my_mesh = SimpleMeshCreator(2, 2, (10, 10), 'x')

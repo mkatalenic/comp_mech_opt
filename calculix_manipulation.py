@@ -3,12 +3,11 @@
 Postavljanje input datoteke za Calculix
 Pokretanje Calculixa
 '''
-
 from datetime import datetime as dt
 
 import re
 import subprocess
-import os
+import os 
 import shutil
 
 import numpy as np
@@ -64,7 +63,7 @@ def create_calculix_inputfile(used_mesh,
 
         # Postavljanje oslonaca
         ccx_input_file.write('*boundary\n')
-        ccx_input_file.writelines([f'{node_id}, {sup_type}\n' \
+        ccx_input_file.writelines([f'{node_id+1}, {sup_type}\n' \
                                    for (node_id,sup_type) in used_mesh.boundary_list])
 
 
@@ -74,8 +73,8 @@ def create_calculix_inputfile(used_mesh,
         else:
             ccx_input_file.write('*step\n*static\n*cload\n')
         for (node_id, force) in used_mesh.force_list:
-            out_x_force_string = f'{node_id}, 1, {force[0]}\n'
-            out_y_force_string = f'{node_id}, 2, {force[1]}\n'
+            out_x_force_string = f'{node_id+1}, 1, {force[0]}\n'
+            out_y_force_string = f'{node_id+1}, 2, {force[1]}\n'
             if force[1] != 0.:
                 ccx_input_file.write(out_y_force_string)
             if force[0] != 0.:
@@ -148,7 +147,7 @@ def run_ccx(filename: str,
 if __name__=='__main__':
     max_x = 1.52
     max_y = 3.24
-    my_mesh = gc.SimpleMeshCreator(max_x, max_y, (10,10), 'x')
+    my_mesh = gc.SimpleMeshCreator(max_x, max_y, (3,3), 'fd')
 
     # my_mesh = gc.ReadGMSH
 
@@ -165,15 +164,15 @@ if __name__=='__main__':
     my_mesh.make_boundary((0,max_y), 2)
 
     my_mesh.make_force((max_x/2, 0), (0, 1000))
-    my_mesh.make_force((0.25, 0.5), (-1500,-1000))
+    my_mesh.make_force((0, max_y/3), (1500, 1000))
 
     my_mesh.material = (1e5, 0.29)
 
-    my_mesh.segmentedbeam_height = 0.25
-    my_mesh.segmentedbeam_initial_width = 0.25
+    my_mesh.segmentedbeam_height = 0.5
+    my_mesh.segmentedbeam_initial_width = 0.5
 
     my_mesh.set_width_array(my_mesh.segmentedbeam_initial_width)
 
     current_mesh_filename = create_calculix_inputfile(my_mesh)
 
-    run_ccx(current_mesh_filename, del_dir=True)
+    run_ccx(current_mesh_filename, del_dir=False)
