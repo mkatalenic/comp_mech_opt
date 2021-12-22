@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
-'''Definiranje geometrije mreže'''
+'''
+Mesh creation definitions
+'''
 
 import numpy as np
 import numpy.typing as npt
@@ -8,77 +10,154 @@ import numpy.typing as npt
 class Mesh:
 
     '''
-    Definiranje objekta mreže koji sprema podatke o mreži.
-    Sadrži metode kreacije mreže.
+    Meta class defining neaded subclass charactersitics
+    Contains:
+    - Mesh object variables
+    - Mesh creation methods
+    - Node fetching methods
+    - Boundary definitions
+    - Force definitions
+
+
+    ---------------------------------------------------------
+    -------------------Variable definition-------------------
+    ---------------------------------------------------------
     '''
 
+    # defined as a tuple
+    # (Module of elasticity, Poisson number)
     material: tuple
-
+    
+    # Beam division
+    # Convergence testing
     segmentedbeam_divisions: int = 4
-
-    # Definiranje array-a u koji se spremaju koordinate čvorova
-    node_array                 = np.empty(shape=(0,2),
-                                          dtype=np.float64)
-
-    main_node_array            = np.empty(shape=(0),
-                                          dtype=int)
-
-    outer_node_array           = np.empty(shape=(0),
-                                          dtype=int)
-
+    
+    # Node arrays
+    # Contains all mesh nodes
+    node_array          = np.empty(shape=(0,2),
+                                   dtype=np.float64)
+    
+    # Contains only main nodes
+    main_node_array     = np.empty(shape=(0),
+                                   dtype=int)
+    
+    # Contains outer nodes
+    outer_node_array    = np.empty(shape=(0),
+                                   dtype=int)
+    
+    # Counts current node indices
     last_added_node_index: int = -1
-
-    # Definiranje array-a u koji se spremaju pojedine grede
+    
+    # Array that contains all segmentbeams (Beams connecting main nodes)
     segmentedbeam_array        = np.empty(shape=(0,
                                                  segmentedbeam_divisions,
                                                  3),
                                           dtype=int)
+    
+    # Array containing widths of all segmentbeams
+    segmentedbeam_width_array = np.empty(shape=(0),
+                                         dtype=float)
+    
+    # The height of the 2D beam construction
+    segmentedbeam_height: float
+    
+    # Lists containing mesh boundaries and external forces
+    boundary_list: list[tuple[int, int]] = []
+    force_list: list[tuple[int, npt.NDArray]] = []
+
+    '''
+    ---------------------------------------------------------
+    -------------------Node fetching methods-----------------
+    ---------------------------------------------------------
+    '''
+
+    def fetch_near_main_node_index(self,
+                                   coords: npt.ArrayLike) -> int:
+        '''Fetches node index based on near coordinates'''
+    
+        coords = np.array(coords)
+        closest_node_index = np.argmin(
+            np.sqrt(
+                np.sum(
+                    np.square(
+                        self.node_array[self.main_node_array] \
+                        - np.repeat(coords.reshape((1,2)), np.size(self.main_node_array), axis=0)
+                    ), axis=1
+                )
+            ), axis = 0
+        )
+        return closest_node_index
+    
+    def node_id_or_fetch_node(self,
+                              node_def) -> int:
+    
+        '''
+        Either forward given id or fetch the nearest node
+        Checks the instance.
+        '''
+        if  isinstance(node_def, int):
+            node_id = node_def
+        else:
+            node_id = self.fetch_near_main_node_index(node_def)
+        return node_id
+
+    '''
+    ---------------------------------------------------------
+    -------------------Creation methods----------------------
+    ---------------------------------------------------------
+    '''
 
     def create_node(self,
                     coords: npt.ArrayLike):
         '''
-        Kreacija novog čvora.
-        Kreirani čvor sprema se u array.
+        Node creation method.
+        Created nodes are added to the self.node_array.
         '''
         tmp_node_array = np.array(coords).reshape(1,2)
         self.node_array = np.append(self.node_array,
                                     tmp_node_array,
                                     axis=0)
         self.last_added_node_index += 1
-
+    
     def create_main_node(self,
                          coords: npt.ArrayLike):
         '''
-        Kreacija i zapisivanje glavnih čvorova
+        Simoultanious node creation
+        and
+        addition to self.main_node_array
         '''
         self.create_node(coords)
         self.main_node_array = np.append(
             self.main_node_array,
             self.last_added_node_index
         )
-
+    
     def create_segmentedbeam(self,
                              first_node: int,
                              last_node:  int):
         '''
-        Postavljanje segmentirane grede koja se sastoji od više greda od 3 čvora.
-        Kreirana segmentirana greda sprema se u segment_array.
+        Segmentedbeam creation.
+    
+        Consists of multiple beams.
+        Segbeam consisting of only one beam contains 3 nodes (Calculix beam creation requires 3 node definition).
+        Added to segmentbeam_array.
         '''
-
+    
         created_middle_nodes = np.linspace(self.node_array[first_node, :],
                                            self.node_array[last_node,  :],
                                            num = self.segmentedbeam_divisions*2 + 1,
                                            endpoint=True,
                                            axis=0)
+    
         created_node_indexes: list[int] = []
-
+    
         for node in created_middle_nodes[1:-1]:
             self.create_node(node)
             created_node_indexes.append(self.last_added_node_index)
-
+    
         all_nodes_in_segbeam = [first_node] + created_node_indexes + [last_node]
         num_of_nodes = len(all_nodes_in_segbeam)
-
+    
         segbeam_beams = np.array(
             [all_nodes_in_segbeam[index:index+3] for index in range(num_of_nodes)[:-2][::2]]
         )
@@ -88,9 +167,82 @@ class Mesh:
             axis=0
         )
 
-class SimpleMeshCreator(Mesh):
     '''
-    Jednostavna kreacija mreže na temelju početnih parametara
+    ---------------------------------------------------------
+    -----------Boundary creation methods---------------------
+    ---------------------------------------------------------
+    '''
+
+    def make_boundary(self,
+                     node_def,
+                     boundary_type: int):
+    
+        '''
+        Boundary definition based on boundary type:
+        - 1 => x - translation
+        - 2 => y - translation
+        - 3 => z - rotation
+        '''
+    
+        node_id = self.fetch_near_main_node_index(node_def)
+    
+        if boundary_type in [1,2,3]:
+            if boundary_type == 3:
+                boundary_type = 6
+            self.boundary_list.append((node_id, boundary_type))
+        else:
+            raise ValueError
+
+    '''
+    ---------------------------------------------------------
+    --------------Force creation methods---------------------
+    ---------------------------------------------------------
+    '''
+
+    def make_force(self,
+                   node_def,
+                   force_vec: npt.ArrayLike):
+    
+            '''
+            Force definition based on given node and
+            (x_force, y_force) vector
+            '''
+    
+            node_id = self.node_id_or_fetch_node(node_def)
+    
+            force_vec = np.array(force_vec)
+    
+            self.force_list.append((node_id, force_vec))
+
+    '''
+    ---------------------------------------------------------
+    --------------Width definition methods-------------------
+    ---------------------------------------------------------
+    '''
+
+    def set_width_array(self,
+                        width):
+        '''
+        Width definition based on the instance of given args
+        '''
+    
+        if isinstance(width, float):
+            self.segmentedbeam_width_array = np.ones(np.shape(self.segmentedbeam_array)[0]) * width
+        elif isinstance(width, npt.ArrayLike):
+            if np.size(width) != np.shape(self.segmentedbeam_array)[0]:
+                raise ValueError
+            else:
+                self.segmentedbeam_width_array = width
+
+
+class SimpleMeshCreator(Mesh):
+
+    '''
+    A simple, automated mesh creaton based on given:
+    - x dimension
+    - y dimension
+    - number of divisions (x_div, y_div)
+    - support definitions
     '''
 
     def __init__(self,
@@ -99,7 +251,7 @@ class SimpleMeshCreator(Mesh):
                  divisions: tuple[int, int],
                  support_definition: str = None):
         '''
-        Kreiranje jednostavne mreže
+        Initialization
         '''
         for vertical_coord in np.linspace(0, height, divisions[1] + 1, endpoint=True):
             for horizontal_coord in np.linspace(0, length, divisions[0] + 1, endpoint=True):
@@ -148,90 +300,3 @@ class SimpleMeshCreator(Mesh):
                                               created_mid_node_index)
                     self.create_segmentedbeam(created_mid_node_index,
                                               current_node_id + 1)
-
-    '''
-   ----------------------------------------------------------------------------------------------------
-    Definiranje početnih uvjeta mreže
-   ----------------------------------------------------------------------------------------------------
-    '''
-
-    # Lista tuplova koji spremaju broj node_a i oblik oslonca
-    boundary_list: list[tuple[int, int]] = []
-    force_list: list[tuple[int, npt.NDArray]] = []
-
-    def make_boundary(self,
-                     node_def,
-                     boundary_type: int):
-        '''Definiranje novog oslonca na temelju tipa'''
-        if  isinstance(node_def, int):
-            node_id = node_def
-        else:
-            node_id = fetch_near_main_node_index(self,
-                                                 node_def)
-
-        if boundary_type in [1,2,3]:
-            if boundary_type == 3:
-                boundary_type = 6
-            self.boundary_list.append((node_id, boundary_type))
-        else:
-            raise ValueError
-
-    def make_force(self,
-                   node_def,
-                   force_vec: npt.ArrayLike):
-        '''Definiranje nove sile na temelju vektorskog zapisa'''
-        if  isinstance(node_def, int):
-            node_id = node_def
-        else:
-            node_id = fetch_near_main_node_index(self,
-                                                 node_def)
-
-        force_vec = np.array(force_vec)
-        self.force_list.append((node_id, force_vec))
-
-    '''
-    ----------------------------------------------------------------------------------------------------
-    WIDTH DEFINITION
-    ----------------------------------------------------------------------------------------------------
-    '''
-    segmentedbeam_width_array = np.empty(shape=(0),
-                                         dtype=float)
-    segmentedbeam_height: float
-
-    def set_width_array(self,
-                        width):
-        '''Jednostavna definicija početnih uvjeta'''
-        if isinstance(width, float):
-            self.segmentedbeam_width_array = np.ones(np.shape(self.segmentedbeam_array)[0]) * width
-        elif isinstance(width, npt.ArrayLike):
-            if np.size(width) != np.shape(self.segmentedbeam_array)[0]:
-                raise ValueError
-            else:
-                self.segmentedbeam_width_array = width
-
-
-def fetch_near_main_node_index(selected_mesh: Mesh,
-                               coords: npt.ArrayLike) -> int:
-    '''Dohvaća točku u blizini definiranih koordinata'''
-
-    coords = np.array(coords)
-    closest_node_index = np.argmin(
-        np.sqrt(
-            np.sum(
-                np.square(
-                    selected_mesh.node_array[selected_mesh.main_node_array] \
-                    - np.repeat(coords.reshape((1,2)), np.size(selected_mesh.main_node_array), axis=0)
-                ), axis=1
-            )
-        ), axis = 0
-    )
-
-    return closest_node_index
-
-if __name__ == '__main__':
-    my_mesh = SimpleMeshCreator(2, 2, (10, 10), 'x')
-
-    # print(my_mesh.main_node_array)
-    # print(my_mesh.node_array)
-    # print(my_mesh.segmentedbeam_array)
-    # print(my_mesh.outer_node_array)

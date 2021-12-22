@@ -69,14 +69,17 @@ if __name__=='__main__':
                        zorder = 1)
 
     '''Crtanje sila'''
-    my_mesh.make_force((0.5, 0), (1,1))
-    for force in my_mesh.force_list:
-        ax.annotate("", xy=my_mesh.node_array[force[0]], xytext=(-0.25, 0.5),
-                    arrowprops=dict(arrowstyle="-|>"))
+    # my_mesh.make_force((0.5, 0), (1,1))
+    # for force in my_mesh.force_list:
+    #     ax.annotate(f'{np.sqrt(np.sum(force[1]**2)):.1E}N',
+    #                 xy=my_mesh.node_array[force[0]],
+    #                 xytext=(-0.25, 0.5),
+    #                 arrowprops=dict(arrowstyle="-|>"))
 
-        print(force)
+    #     print(force[1])
 
     plt.show()
+
 '''
 
     # my_mesh.make_force((max_x/2, 0), (0,1))

@@ -1,0 +1,640 @@
+#+TITLE: Dizajn podatljivih mehanizama uz pomoć numeričke optimizacije
+#+startup: fold
+#+auto_tangle: t
+
+* Razlog iza programa
+
+Program se koristi u svrhe istraživanja za diplomski rad /Dizajn podatljivih mehanizama uz pomoć numeričke optimizacije/.
+Cilj programa je pronalazak optimalne rešetkaste gredne konstrukcije na temelju početnih i krajnjih uvijeta
+Sastoji se od sljedećih dijelova:
+- Postavljanje geometrije
+- Prevođenje i pokretanje analize pomoću programa /Calculix/
+- Optimizacije zadane konstrukcije na temelju zadanih početnih i krajnjih uvijeta
+- Praćenje otimizacije vizualizacijom procesa pomoću biblioteke /matplotlib/
+
+* Uvod
+- Početi čitati članke i zapisati si sve pizdarije iz njih sim
+* Postavljanje Geometrije
+** Imports
+
+#+name: imports_geometry
+#+begin_src python
+import numpy as np
+import numpy.typing as npt
+#+end_src
+
+** Mesh klasa [0/0]
+
+#+name: class_variable
+#+begin_src python
+# defined as a tuple
+# (Module of elasticity, Poisson number)
+material: tuple
+
+# Beam division
+# Convergence testing
+segmentedbeam_divisions: int = 4
+
+# Node arrays
+# Contains all mesh nodes
+node_array          = np.empty(shape=(0,2),
+                               dtype=np.float64)
+
+# Contains only main nodes
+main_node_array     = np.empty(shape=(0),
+                               dtype=int)
+
+# Contains outer nodes
+outer_node_array    = np.empty(shape=(0),
+                               dtype=int)
+
+# Counts current node indices
+last_added_node_index: int = -1
+
+# Array that contains all segmentbeams (Beams connecting main nodes)
+segmentedbeam_array        = np.empty(shape=(0,
+                                             segmentedbeam_divisions,
+                                             3),
+                                      dtype=int)
+
+# Array containing widths of all segmentbeams
+segmentedbeam_width_array = np.empty(shape=(0),
+                                     dtype=float)
+
+# The height of the 2D beam construction
+segmentedbeam_height: float
+
+# Lists containing mesh boundaries and external forces
+boundary_list: list[tuple[int, int]] = []
+force_list: list[tuple[int, npt.NDArray]] = []
+#+end_src
+
+#+name: node_fetching_methods
+#+begin_src python
+def fetch_near_main_node_index(self,
+                               coords: npt.ArrayLike) -> int:
+    '''Fetches node index based on near coordinates'''
+
+    coords = np.array(coords)
+    closest_node_index = np.argmin(
+        np.sqrt(
+            np.sum(
+                np.square(
+                    self.node_array[self.main_node_array] \
+                    - np.repeat(coords.reshape((1,2)), np.size(self.main_node_array), axis=0)
+                ), axis=1
+            )
+        ), axis = 0
+    )
+    return closest_node_index
+
+def node_id_or_fetch_node(self,
+                          node_def) -> int:
+
+    '''
+    Either forward given id or fetch the nearest node
+    Checks the instance.
+    '''
+    if  isinstance(node_def, int):
+        node_id = node_def
+    else:
+        node_id = self.fetch_near_main_node_index(node_def)
+    return node_id
+#+end_src
+
+#+name: mesh_element_creation_methods
+#+begin_src python
+def create_node(self,
+                coords: npt.ArrayLike):
+    '''
+    Node creation method.
+    Created nodes are added to the self.node_array.
+    '''
+    tmp_node_array = np.array(coords).reshape(1,2)
+    self.node_array = np.append(self.node_array,
+                                tmp_node_array,
+                                axis=0)
+    self.last_added_node_index += 1
+
+def create_main_node(self,
+                     coords: npt.ArrayLike):
+    '''
+    Simoultanious node creation
+    and
+    addition to self.main_node_array
+    '''
+    self.create_node(coords)
+    self.main_node_array = np.append(
+        self.main_node_array,
+        self.last_added_node_index
+    )
+
+def create_segmentedbeam(self,
+                         first_node: int,
+                         last_node:  int):
+    '''
+    Segmentedbeam creation.
+
+    Consists of multiple beams.
+    Segbeam consisting of only one beam contains 3 nodes (Calculix beam creation requires 3 node definition).
+    Added to segmentbeam_array.
+    '''
+
+    created_middle_nodes = np.linspace(self.node_array[first_node, :],
+                                       self.node_array[last_node,  :],
+                                       num = self.segmentedbeam_divisions*2 + 1,
+                                       endpoint=True,
+                                       axis=0)
+
+    created_node_indexes: list[int] = []
+
+    for node in created_middle_nodes[1:-1]:
+        self.create_node(node)
+        created_node_indexes.append(self.last_added_node_index)
+
+    all_nodes_in_segbeam = [first_node] + created_node_indexes + [last_node]
+    num_of_nodes = len(all_nodes_in_segbeam)
+
+    segbeam_beams = np.array(
+        [all_nodes_in_segbeam[index:index+3] for index in range(num_of_nodes)[:-2][::2]]
+    )
+    self.segmentedbeam_array = np.append(
+        self.segmentedbeam_array,
+        segbeam_beams.reshape((1,self.segmentedbeam_divisions,3)),
+        axis=0
+    )
+#+end_src
+
+#+name: boundary_creation_method
+#+begin_src python
+def make_boundary(self,
+                 node_def,
+                 boundary_type: int):
+
+    '''
+    Boundary definition based on boundary type:
+    - 1 => x - translation
+    - 2 => y - translation
+    - 3 => z - rotation
+    '''
+
+    node_id = self.fetch_near_main_node_index(node_def)
+
+    if boundary_type in [1,2,3]:
+        if boundary_type == 3:
+            boundary_type = 6
+        self.boundary_list.append((node_id, boundary_type))
+    else:
+        raise ValueError
+#+end_src
+
+#+name: force_creation_method
+#+begin_src python
+def make_force(self,
+               node_def,
+               force_vec: npt.ArrayLike):
+
+        '''
+        Force definition based on given node and
+        (x_force, y_force) vector
+        '''
+
+        node_id = self.node_id_or_fetch_node(node_def)
+
+        force_vec = np.array(force_vec)
+
+        self.force_list.append((node_id, force_vec))
+#+end_src
+
+#+name: width_definition_method
+#+begin_src python
+def set_width_array(self,
+                    width):
+    '''
+    Width definition based on the instance of given args
+    '''
+
+    if isinstance(width, float):
+        self.segmentedbeam_width_array = np.ones(np.shape(self.segmentedbeam_array)[0]) * width
+    elif isinstance(width, npt.ArrayLike):
+        if np.size(width) != np.shape(self.segmentedbeam_array)[0]:
+            raise ValueError
+        else:
+            self.segmentedbeam_width_array = width
+#+end_src
+
+#+name: Mesh_class
+#+begin_src python :noweb yes
+class Mesh:
+
+    '''
+    Meta class defining neaded subclass charactersitics
+    Contains:
+    - Mesh object variables
+    - Mesh creation methods
+    - Node fetching methods
+    - Boundary definitions
+    - Force definitions
+
+
+    ---------------------------------------------------------
+    -------------------Variable definition-------------------
+    ---------------------------------------------------------
+    '''
+
+    <<class_variable>>
+
+    '''
+    ---------------------------------------------------------
+    -------------------Node fetching methods-----------------
+    ---------------------------------------------------------
+    '''
+
+    <<node_fetching_methods>>
+
+    '''
+    ---------------------------------------------------------
+    -------------------Creation methods----------------------
+    ---------------------------------------------------------
+    '''
+
+    <<mesh_element_creation_methods>>
+
+    '''
+    ---------------------------------------------------------
+    -----------Boundary creation methods---------------------
+    ---------------------------------------------------------
+    '''
+
+    <<boundary_creation_method>>
+
+    '''
+    ---------------------------------------------------------
+    --------------Force creation methods---------------------
+    ---------------------------------------------------------
+    '''
+
+    <<force_creation_method>>
+
+    '''
+    ---------------------------------------------------------
+    --------------Width definition methods-------------------
+    ---------------------------------------------------------
+    '''
+
+    <<width_definition_method>>
+
+#+end_src
+
+** Simple mesh creator
+
+#+name: SimpleMeshCreator
+#+begin_src python
+class SimpleMeshCreator(Mesh):
+
+    '''
+    A simple, automated mesh creaton based on given:
+    - x dimension
+    - y dimension
+    - number of divisions (x_div, y_div)
+    - support definitions
+    '''
+
+    def __init__(self,
+                 length: float,
+                 height: float,
+                 divisions: tuple[int, int],
+                 support_definition: str = None):
+        '''
+        Initialization
+        '''
+        for vertical_coord in np.linspace(0, height, divisions[1] + 1, endpoint=True):
+            for horizontal_coord in np.linspace(0, length, divisions[0] + 1, endpoint=True):
+                self.create_main_node((horizontal_coord, vertical_coord))
+
+                if horizontal_coord in (0, length) or vertical_coord in (0, height):
+                    self.outer_node_array = np.append(self.outer_node_array,
+                                                      self.main_node_array[
+                                                          self.last_added_node_index])
+
+        for y_node in range(divisions[1] + 1):
+            for x_node in range(divisions[0] + 1):
+                current_node_id = x_node + y_node*(divisions[0] + 1)
+
+                if x_node < divisions[0]:
+                    self.create_segmentedbeam(current_node_id,
+                                              current_node_id + 1)
+                if y_node < divisions[1]:
+                    self.create_segmentedbeam(current_node_id,
+                                              current_node_id + (divisions[0] + 1))
+
+                if support_definition == 'fd' and y_node < divisions[1] and x_node < divisions[0]:
+                    self.create_segmentedbeam(current_node_id,
+                                              current_node_id + 1 + (divisions[0] + 1))
+
+                if support_definition == 'bd' and y_node < divisions[1] and x_node > 0:
+                    self.create_segmentedbeam(current_node_id,
+                                              current_node_id - 1 + (divisions[0] + 1))
+
+                if support_definition == 'x' and y_node < divisions[1] and x_node < divisions[0]:
+                    self.create_main_node(
+                        np.average(
+                            self.node_array[[current_node_id,
+                                             current_node_id + 1 + (divisions[0] + 1)],:],
+                            axis=0
+                        )
+                    )
+
+                    created_mid_node_index = self.last_added_node_index
+
+                    self.create_segmentedbeam(current_node_id,
+                                              created_mid_node_index)
+                    self.create_segmentedbeam(created_mid_node_index,
+                                              current_node_id + 1 + (divisions[0] + 1))
+                    self.create_segmentedbeam(current_node_id + (divisions[0] + 1),
+                                              created_mid_node_index)
+                    self.create_segmentedbeam(created_mid_node_index,
+                                              current_node_id + 1)
+#+end_src
+
+** OUTPUT_TO_FILE :noexport:
+
+#+name: geometry_creation_file
+#+begin_src python :noweb yes :tangle geometry_creation.py
+#!/usr/bin/env python3
+
+'''
+Mesh creation definitions
+'''
+
+<<imports_geometry>>
+
+<<Mesh_class>>
+
+<<SimpleMeshCreator>>
+#+end_src
+
+* Calculix prevoditelj
+** Imports
+
+#+name: imports_ccx_manipulator
+#+begin_src python
+# Used for random name creation
+from datetime import datetime as dt
+
+# OS interaction
+import re
+import subprocess
+import os
+import shutil
+
+# Numpy
+import numpy as np
+
+# Geometry creation
+import geometry_creation as gc
+#+end_src
+
+** Calculix manipulator
+#+name: calculix_input_creator
+#+begin_src python
+def create_calculix_inputfile(used_mesh,
+                              filename: str = dt.now().strftime('mesh_%d_%M_%H%M%S'),
+                              nonlin: bool = True) -> str:
+
+    '''
+    Mesh translator.
+    Translates program defined mesh to Calculix input file.
+    '''
+
+    os.mkdir(filename)
+
+
+    # Segmentbeam creation condition
+    height_percentage = 1e-2
+    minimal_width = used_mesh.segmentedbeam_height * height_percentage
+
+    segmentedbeams_to_write = np.array(
+        [segmentedbeam
+         for segmentedbeam, width in zip(used_mesh.segmentedbeam_array, used_mesh.segmentedbeam_width_array)
+         if width >= minimal_width]
+    )
+    segmentedbeam_widths_to_write = np.array(
+        [width
+         for width in used_mesh.segmentedbeam_width_array
+         if width >= minimal_width]
+    )
+
+
+    with open(filename + '/' + filename + '.inp', 'w', encoding='ascii') as ccx_input_file:
+
+        # Node translator
+        ccx_input_file.write('*node, nset=nall\n')
+        ccx_input_file.writelines(
+            [f'{i + 1}, {np.array2string(row, separator=",")[1:-1]}\n'
+             for i, row in zip(np.unique(segmentedbeams_to_write), used_mesh.node_array[np.unique(segmentedbeams_to_write)])]
+        )
+
+        # Beam translator
+        elset_name_list: list[str] = []
+        for index, segbeam in enumerate(segmentedbeams_to_write):
+            elset_name = f'b_{index}'
+            elset_name_list.append(elset_name)
+            ccx_input_file.write(f'*element, type=b32, elset={elset_name}\n')
+            ccx_input_file.writelines(
+                [f'{i + 1 + index * used_mesh.segmentedbeam_divisions}, \
+                {np.array2string(row + 1, separator=",")[1:-1]}\n'
+                 for i, row in enumerate(segbeam)]
+            )
+        ccx_input_file.write('*elset, elset=elall\n')
+        ccx_input_file.writelines([f'{name},\n' for name in elset_name_list])
+
+        # Materials writer
+        ccx_input_file.write('*material, name=mesh_material\n' +\
+                             '*elastic, type=iso\n' + \
+                             f'{used_mesh.material}'[1:-1] + '\n')
+
+        # Beam width setter
+        for elset_name, width in zip(elset_name_list,   segmentedbeam_widths_to_write):
+            ccx_input_file.write(f'*beam section,elset={elset_name},' +
+                                 'material=mesh_material,section=rect\n')
+            ccx_input_file.write(f'{used_mesh.segmentedbeam_height}, {width}\n' +
+                                 '0.d0,0.d0,1.d0\n')
+
+        # 2D case definition
+        ccx_input_file.write('*boundary\n')
+        ccx_input_file.writelines([f'{i + 1}, 3,5\n' \
+                                   for i in np.unique(segmentedbeams_to_write)])
+
+        # Boundary translator
+        ccx_input_file.write('*boundary\n')
+        ccx_input_file.writelines([f'{node_id+1}, {sup_type}\n' \
+                                   for (node_id,sup_type) in used_mesh.boundary_list])
+
+        # Force translator
+        if nonlin:
+            ccx_input_file.write('*step, nlgeom\n*static\n*cload\n')
+        else:
+            ccx_input_file.write('*step\n*static\n*cload\n')
+        for (node_id, force) in used_mesh.force_list:
+            out_x_force_string = f'{node_id+1}, 1, {force[0]}\n'
+            out_y_force_string = f'{node_id+1}, 2, {force[1]}\n'
+            if force[1] != 0.:
+                ccx_input_file.write(out_y_force_string)
+            if force[0] != 0.:
+                ccx_input_file.write(out_x_force_string)
+
+
+        ccx_input_file.write('*el print, elset=elall\ns\n')
+        ccx_input_file.write('*node file, output=2d, nset=nall\nu\n')
+        ccx_input_file.write('*el file, elset=elall\ns,noe\n')
+        ccx_input_file.write('*el print, nset=nall\nevol\n')
+        ccx_input_file.write('*end step')
+
+    return filename
+#+end_src
+
+#+name: results_reader
+#+begin_src python
+def output_string_formatter(output_string: str):
+
+    '''
+    Formats the native .frd format to usefull data
+    '''
+
+    exponentials = re.split('E', output_string)[1:]
+    output_numbers = re.split('E...',output_string)[:-1]
+
+    output_numbers = [float(num) * 10**float(exp[:3])
+                      for num,exp in zip(output_numbers,exponentials)]
+
+    return output_numbers
+
+def read_node_displacement_and_stress(filename: str):
+
+    '''
+    Reads and outputs displacement and stress results
+    '''
+
+    with open(filename + '.frd', 'r', encoding='utf8') as results_file:
+        displacement_list = []
+        stress_list = []
+
+        in_disp_section = False
+        in_stress_section = False
+        for line in results_file:
+
+            if line[5:].startswith('DISP'):
+                in_disp_section = True
+
+            if line[5:].startswith('STRESS'):
+                in_stress_section = True
+
+            if line.startswith(' -3'):
+                in_disp_section = False
+                in_stress_section = False
+
+            if in_disp_section:
+                displacement_list.append(output_string_formatter(line.strip()[12:]))
+
+            if in_stress_section:
+                stress_list.append(output_string_formatter(line.strip()[12:]))
+
+    stress_array = np.array(stress_list[7:])
+    displacement_array = np.array(displacement_list[5:])
+
+    return displacement_array[:,:-1], stress_array
+#+end_src
+
+#+name: calculix_runner
+#+begin_src python
+def run_ccx(filename: str,
+            del_dir: bool = False):
+
+    '''
+    Calculix runner
+    Outputs displacement and stress lists
+    '''
+
+    os.chdir(filename)
+    subprocess.run(['ccx', filename], check=True)
+    disp, stress = read_node_displacement_and_stress(filename)
+    os.chdir('..')
+
+    if del_dir:
+        shutil.rmtree(filename)
+
+    return disp, stress
+#+end_src
+
+** OUTPUT_TO_FILE :noexport:
+
+#+name: calculix_manipulation_file
+#+begin_src python :noweb yes :tangle calculix_manipulation.py :shebang #!/usr/bin/env python3
+'''
+Calculix manipulation functions
+Contains a simple test
+'''
+
+<<imports_ccx_manipulator>>
+
+'''
+--------------------------------------------
+---------Calculix input creator-------------
+--------------------------------------------
+'''
+
+<<calculix_input_creator>>
+
+'''
+--------------------------------------------
+---------Calculix result reader-------------
+--------------------------------------------
+'''
+
+<<results_reader>>
+
+'''
+--------------------------------------------
+--------------Calculix runner---------------
+--------------------------------------------
+'''
+
+<<calculix_runner>>
+
+#+end_src
+
+* TODO Optimizacija
+
+Postavljanje sila i oslonaca unutar definicije funkcije cilja.
+Postavljanje višestrukih krajnjih uvijeta na sličan način na koji se postavljaju početni uvijeti.
+
+- [ ] Treba uvesti zabranu micanja grede ako ona uvjetuje micanje većine oslonaca
+- [ ] Zabrana micanja grede ako njeno micanje ostavlja čvor s jednom gredom (solo greda na kraju konstrukcije)
+
+* TODO Vizualizacija procesa
+
+- [ ] Zapisati v dobrome formatu i postaviti pisanje dobivenih pomaka
+- [ ] ZA SAD PUSTI JEBENU SILU
+
+** Imports
+
+#+name: imports_vizual
+#+begin_src python
+# Plotting
+import matplotlib.pyplot as plt
+
+# Numpy
+import numpy as np
+import numpy.typing as npt
+
+# Other programs
+import geometry_creation as gc
+import calculix_manipulation as cm
+
+# Cuz pretty
+plt.style.use('dark_background')
+#+end_src
+
+* IDEJA
+Napraviti mogućnost višestruke optimizcije konstrukcije zadavajući više različitih uvijeta koje konstrukcija mora zadovoljiti.

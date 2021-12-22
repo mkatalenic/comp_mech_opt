@@ -1,38 +1,70 @@
 #!/usr/bin/env python3
 '''
-Postavljanje input datoteke za Calculix
-Pokretanje Calculixa
+Calculix manipulation functions
+Contains a simple test
 '''
+
+# Used for random name creation
 from datetime import datetime as dt
 
+# OS interaction
 import re
 import subprocess
-import os 
+import os
 import shutil
 
+# Numpy
 import numpy as np
 
+# Geometry creation
 import geometry_creation as gc
+
+'''
+--------------------------------------------
+---------Calculix input creator-------------
+--------------------------------------------
+'''
 
 def create_calculix_inputfile(used_mesh,
                               filename: str = dt.now().strftime('mesh_%d_%M_%H%M%S'),
                               nonlin: bool = True) -> str:
-    '''Metoda ispisa mreže u input_file'''
+
+    '''
+    Mesh translator.
+    Translates program defined mesh to Calculix input file.
+    '''
 
     os.mkdir(filename)
 
+
+    # Segmentbeam creation condition
+    height_percentage = 1e-2
+    minimal_width = used_mesh.segmentedbeam_height * height_percentage
+
+    segmentedbeams_to_write = np.array(
+        [segmentedbeam
+         for segmentedbeam, width in zip(used_mesh.segmentedbeam_array, used_mesh.segmentedbeam_width_array)
+         if width >= minimal_width]
+    )
+    segmentedbeam_widths_to_write = np.array(
+        [width
+         for width in used_mesh.segmentedbeam_width_array
+         if width >= minimal_width]
+    )
+
+
     with open(filename + '/' + filename + '.inp', 'w', encoding='ascii') as ccx_input_file:
 
-        # Definicija čvorova
+        # Node translator
         ccx_input_file.write('*node, nset=nall\n')
         ccx_input_file.writelines(
             [f'{i + 1}, {np.array2string(row, separator=",")[1:-1]}\n'
-             for i, row in enumerate(used_mesh.node_array)]
+             for i, row in zip(np.unique(segmentedbeams_to_write), used_mesh.node_array[np.unique(segmentedbeams_to_write)])]
         )
 
-        # Definicija greda
+        # Beam translator
         elset_name_list: list[str] = []
-        for index, segbeam in enumerate(used_mesh.segmentedbeam_array):
+        for index, segbeam in enumerate(segmentedbeams_to_write):
             elset_name = f'b_{index}'
             elset_name_list.append(elset_name)
             ccx_input_file.write(f'*element, type=b32, elset={elset_name}\n')
@@ -44,30 +76,29 @@ def create_calculix_inputfile(used_mesh,
         ccx_input_file.write('*elset, elset=elall\n')
         ccx_input_file.writelines([f'{name},\n' for name in elset_name_list])
 
-        # Materials
+        # Materials writer
         ccx_input_file.write('*material, name=mesh_material\n' +\
                              '*elastic, type=iso\n' + \
                              f'{used_mesh.material}'[1:-1] + '\n')
 
-        # Postavljanje poprečnog presjeka greda
-        for elset_name, width in zip(elset_name_list, used_mesh.segmentedbeam_width_array):
+        # Beam width setter
+        for elset_name, width in zip(elset_name_list,   segmentedbeam_widths_to_write):
             ccx_input_file.write(f'*beam section,elset={elset_name},' +
                                  'material=mesh_material,section=rect\n')
             ccx_input_file.write(f'{used_mesh.segmentedbeam_height}, {width}\n' +
                                  '0.d0,0.d0,1.d0\n')
 
-        # Definiranje 2D slučaja
+        # 2D case definition
         ccx_input_file.write('*boundary\n')
         ccx_input_file.writelines([f'{i + 1}, 3,5\n' \
-                                   for i in range(used_mesh.last_added_node_index + 1)])
+                                   for i in np.unique(segmentedbeams_to_write)])
 
-        # Postavljanje oslonaca
+        # Boundary translator
         ccx_input_file.write('*boundary\n')
         ccx_input_file.writelines([f'{node_id+1}, {sup_type}\n' \
                                    for (node_id,sup_type) in used_mesh.boundary_list])
 
-
-        # Postavljanje sila
+        # Force translator
         if nonlin:
             ccx_input_file.write('*step, nlgeom\n*static\n*cload\n')
         else:
@@ -89,8 +120,18 @@ def create_calculix_inputfile(used_mesh,
 
     return filename
 
+'''
+--------------------------------------------
+---------Calculix result reader-------------
+--------------------------------------------
+'''
+
 def output_string_formatter(output_string: str):
-    '''Vraća potrebni format ispisa'''
+
+    '''
+    Formats the native .frd format to usefull data
+    '''
+
     exponentials = re.split('E', output_string)[1:]
     output_numbers = re.split('E...',output_string)[:-1]
 
@@ -100,7 +141,10 @@ def output_string_formatter(output_string: str):
     return output_numbers
 
 def read_node_displacement_and_stress(filename: str):
-    '''Čitanje pomaka pojedinih čvorova mreže'''
+
+    '''
+    Reads and outputs displacement and stress results
+    '''
 
     with open(filename + '.frd', 'r', encoding='utf8') as results_file:
         displacement_list = []
@@ -129,13 +173,24 @@ def read_node_displacement_and_stress(filename: str):
     stress_array = np.array(stress_list[7:])
     displacement_array = np.array(displacement_list[5:])
 
-    return displacement_array, stress_array
+    return displacement_array[:,:-1], stress_array
+
+'''
+--------------------------------------------
+--------------Calculix runner---------------
+--------------------------------------------
+'''
 
 def run_ccx(filename: str,
             del_dir: bool = False):
-    '''Pokretanje rješavaća, output su disp i stress'''
+
+    '''
+    Calculix runner
+    Outputs displacement and stress lists
+    '''
+
     os.chdir(filename)
-    subprocess.run(['ccx', filename.strip(".inp")], check=True)
+    subprocess.run(['ccx', filename], check=True)
     disp, stress = read_node_displacement_and_stress(filename)
     os.chdir('..')
 
@@ -143,36 +198,3 @@ def run_ccx(filename: str,
         shutil.rmtree(filename)
 
     return disp, stress
-
-if __name__=='__main__':
-    max_x = 1.52
-    max_y = 3.24
-    my_mesh = gc.SimpleMeshCreator(max_x, max_y, (3,3), 'fd')
-
-    # my_mesh = gc.ReadGMSH
-
-    # my_mesh.make_boundary((0,0), 1)
-    # my_mesh.make_boundary((0,0), 2)
-
-    my_mesh.make_boundary((max_x,0), 1)
-    my_mesh.make_boundary((max_x,0), 2)
-
-    my_mesh.make_boundary((max_x,max_y), 1)
-    my_mesh.make_boundary((max_x,max_y), 2)
-
-    my_mesh.make_boundary((0,max_y), 1)
-    my_mesh.make_boundary((0,max_y), 2)
-
-    my_mesh.make_force((max_x/2, 0), (0, 1000))
-    my_mesh.make_force((0, max_y/3), (1500, 1000))
-
-    my_mesh.material = (1e5, 0.29)
-
-    my_mesh.segmentedbeam_height = 0.5
-    my_mesh.segmentedbeam_initial_width = 0.5
-
-    my_mesh.set_width_array(my_mesh.segmentedbeam_initial_width)
-
-    current_mesh_filename = create_calculix_inputfile(my_mesh)
-
-    run_ccx(current_mesh_filename, del_dir=False)
