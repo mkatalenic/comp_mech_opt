@@ -36,22 +36,8 @@ def create_calculix_inputfile(used_mesh,
 
     os.mkdir(filename)
 
-
-    # Segmentbeam creation condition
-    height_percentage = 1e-2
-    minimal_width = used_mesh.segmentedbeam_height * height_percentage
-
-    segmentedbeams_to_write = np.array(
-        [segmentedbeam
-         for segmentedbeam, width in zip(used_mesh.segmentedbeam_array, used_mesh.segmentedbeam_width_array)
-         if width >= minimal_width]
-    )
-    segmentedbeam_widths_to_write = np.array(
-        [width
-         for width in used_mesh.segmentedbeam_width_array
-         if width >= minimal_width]
-    )
-
+    segmentedbeams_to_write = used_mesh.current_segmentedbeams
+    segmentedbeam_widths_to_write = used_mesh.segmentedbeam_width_array
 
     with open(filename + '/' + filename + '.inp', 'w', encoding='ascii') as ccx_input_file:
 
@@ -96,7 +82,7 @@ def create_calculix_inputfile(used_mesh,
         # Boundary translator
         ccx_input_file.write('*boundary\n')
         ccx_input_file.writelines([f'{node_id+1}, {sup_type}\n' \
-                                   for (node_id,sup_type) in used_mesh.boundary_list])
+                                   for (node_id,sup_type,_) in used_mesh.boundary_list])
 
         # Force translator
         if nonlin:

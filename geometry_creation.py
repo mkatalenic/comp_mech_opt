@@ -174,8 +174,9 @@ class Mesh:
     '''
 
     def make_boundary(self,
-                     node_def,
-                     boundary_type: int):
+                      node_def,
+                      boundary_type: int,
+                      removable=True):
     
         '''
         Boundary definition based on boundary type:
@@ -189,7 +190,7 @@ class Mesh:
         if boundary_type in [1,2,3]:
             if boundary_type == 3:
                 boundary_type = 6
-            self.boundary_list.append((node_id, boundary_type))
+            self.boundary_list.append((node_id, boundary_type, removable))
         else:
             raise ValueError
 
@@ -216,23 +217,92 @@ class Mesh:
 
     '''
     ---------------------------------------------------------
-    --------------Width definition methods-------------------
+    --------------Width definition method--------------------
     ---------------------------------------------------------
     '''
 
+    minimal_segmentedbeam_width: float
+
+    current_segmentedbeams = np.array([])
+
     def set_width_array(self,
-                        width):
+                        input_width):
         '''
         Width definition based on the instance of given args
         '''
     
-        if isinstance(width, float):
-            self.segmentedbeam_width_array = np.ones(np.shape(self.segmentedbeam_array)[0]) * width
-        elif isinstance(width, npt.ArrayLike):
-            if np.size(width) != np.shape(self.segmentedbeam_array)[0]:
-                raise ValueError
+        if isinstance(input_width, float):
+            self.segmentedbeam_width_array = np.ones(np.shape(self.segmentedbeam_array)[0]) * input_width
+
+        else:
+            if np.size(input_width) == np.shape(self.segmentedbeam_array)[0]:
+
+                beams_qued_for_removal = self.segmentedbeam_array[input_width < self.minimal_segmentedbeam_width]
+                proposed_beams_left    = self.segmentedbeam_array[input_width >= self.minimal_segmentedbeam_width]
+                self.segmentedbeam_width_array = input_width[input_width >= self.minimal_segmentedbeam_width]
+
+                removed_main_nodes, removed_main_nodes_count = np.unique(
+                    beams_qued_for_removal[:, [0, -1], [0, -1]],
+                    return_counts=True
+                )
+
+                _, main_nodes_count = np.unique(
+                    self.segmentedbeam_array[:, [0, -1], [0, -1]],
+                    return_counts = True
+                )
+
+                # Lonely node constraint
+                # A main node cannot have only one beam conected to it
+
+                if 1 in main_nodes_count[removed_main_nodes] - removed_main_nodes_count:
+                    raise ValueError('Lonely node alert!')
+
+                # Force removal constraint
+                # Raises an error if it tries to remove a beam containing force definition
+
+                if np.size(
+                        np.intersect1d(
+                            proposed_beams_left,
+                            np.array([node_id for node_id, _ in self.force_list])
+                        )
+                ) == 0:
+                    raise ValueError('Trying to remove a force!')
+
+                # Boundary removal constraint
+                # Raises an error if it tries to remove most bounderies
+
+                unremovable_boundary = np.unique(np.array([node_id for node_id, _, removable in self.boundary_list if removable == False]))
+
+                if np.intersect1d(
+                        unremovable_boundary,
+                        proposed_beams_left
+                ) == 0:
+                    raise ValueError('Trying to remove an unremovable boundary!')
+
+                explicit_boundary = np.array(
+                    [[node_id, bound_def]  for node_id, bound_def, _ in self.boundary_list]
+                )
+
+                bd_left_in_proposed = np.intersect1d(
+                    np.unique(explicit_boundary[:,0]),
+                    proposed_beams_left
+                )
+
+
+                if np.size(bd_left_in_proposed) == 1 and\
+                   not np.isin(explicit_boundary[:,1][explicit_boundary[:,0] == int(bd_left_in_proposed)],
+                           [1,2,6]).all():
+                    raise ValueError('Too many boundaries removed!')
+
+                # TREBA ISPRAVITI OVO S DODAVANJE OVISNOSTI O VRSTI
+                # ZA SAD NEMA VEZE
+                if np.size(bd_left_in_proposed) < 2:
+                    raise ValueError('Too man boundaries removed!!')
+
+                self.current_segmentedbeams = proposed_beams_left
+
             else:
-                self.segmentedbeam_width_array = width
+                raise ValueError('Wrong array size!')
 
 
 class SimpleMeshCreator(Mesh):

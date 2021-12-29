@@ -13,7 +13,6 @@ Sastoji se od sljedećih dijelova:
 - Praćenje otimizacije vizualizacijom procesa pomoću biblioteke /matplotlib/
 
 * Uvod
-- Početi čitati članke i zapisati si sve pizdarije iz njih sim
 * Postavljanje Geometrije
 ** Imports
 
@@ -615,7 +614,6 @@ Postavljanje višestrukih krajnjih uvijeta na sličan način na koji se postavlj
 * TODO Vizualizacija procesa
 
 - [ ] Zapisati v dobrome formatu i postaviti pisanje dobivenih pomaka
-- [ ] ZA SAD PUSTI JEBENU SILU
 
 ** Imports
 
@@ -636,5 +634,3 @@ import calculix_manipulation as cm
 plt.style.use('dark_background')
 #+end_src
 
-* IDEJA
-Napraviti mogućnost višestruke optimizcije konstrukcije zadavajući više različitih uvijeta koje konstrukcija mora zadovoljiti.
