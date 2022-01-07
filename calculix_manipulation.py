@@ -175,10 +175,10 @@ def run_ccx(filename: str,
     Outputs displacement and stress lists
     '''
 
-    os.chdir(filename)
-    subprocess.run(['ccx', filename], check=True)
-    disp, stress = read_node_displacement_and_stress(filename)
-    os.chdir('..')
+    # os.chdir(filename)
+    subprocess.call(['ccx', filename], cwd=filename, stdout=subprocess.DEVNULL)
+    disp, stress = read_node_displacement_and_stress(filename + '/' + filename)
+    # os.chdir('..')
 
     if del_dir:
         shutil.rmtree(filename)

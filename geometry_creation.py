@@ -27,40 +27,40 @@ class Mesh:
     # defined as a tuple
     # (Module of elasticity, Poisson number)
     material: tuple
-    
+
     # Beam division
     # Convergence testing
     segmentedbeam_divisions: int = 4
-    
+
     # Node arrays
     # Contains all mesh nodes
     node_array          = np.empty(shape=(0,2),
                                    dtype=np.float64)
-    
+
     # Contains only main nodes
     main_node_array     = np.empty(shape=(0),
                                    dtype=int)
-    
+
     # Contains outer nodes
     outer_node_array    = np.empty(shape=(0),
                                    dtype=int)
-    
+
     # Counts current node indices
     last_added_node_index: int = -1
-    
+
     # Array that contains all segmentbeams (Beams connecting main nodes)
     segmentedbeam_array        = np.empty(shape=(0,
                                                  segmentedbeam_divisions,
                                                  3),
                                           dtype=int)
-    
+
     # Array containing widths of all segmentbeams
     segmentedbeam_width_array = np.empty(shape=(0),
                                          dtype=float)
-    
+
     # The height of the 2D beam construction
     segmentedbeam_height: float
-    
+
     # Lists containing mesh boundaries and external forces
     boundary_list: list[tuple[int, int]] = []
     force_list: list[tuple[int, npt.NDArray]] = []
@@ -74,7 +74,7 @@ class Mesh:
     def fetch_near_main_node_index(self,
                                    coords: npt.ArrayLike) -> int:
         '''Fetches node index based on near coordinates'''
-    
+
         coords = np.array(coords)
         closest_node_index = np.argmin(
             np.sqrt(
@@ -87,10 +87,10 @@ class Mesh:
             ), axis = 0
         )
         return closest_node_index
-    
+
     def node_id_or_fetch_node(self,
                               node_def) -> int:
-    
+
         '''
         Either forward given id or fetch the nearest node
         Checks the instance.
@@ -118,7 +118,7 @@ class Mesh:
                                     tmp_node_array,
                                     axis=0)
         self.last_added_node_index += 1
-    
+
     def create_main_node(self,
                          coords: npt.ArrayLike):
         '''
@@ -131,33 +131,34 @@ class Mesh:
             self.main_node_array,
             self.last_added_node_index
         )
-    
+
     def create_segmentedbeam(self,
                              first_node: int,
                              last_node:  int):
         '''
         Segmentedbeam creation.
-    
+
         Consists of multiple beams.
-        Segbeam consisting of only one beam contains 3 nodes (Calculix beam creation requires 3 node definition).
+        Segbeam consisting of only one beam contains 3 nodes
+        (Calculix beam creation requires 3 node definition).
         Added to segmentbeam_array.
         '''
-    
+
         created_middle_nodes = np.linspace(self.node_array[first_node, :],
                                            self.node_array[last_node,  :],
                                            num = self.segmentedbeam_divisions*2 + 1,
                                            endpoint=True,
                                            axis=0)
-    
+
         created_node_indexes: list[int] = []
-    
+
         for node in created_middle_nodes[1:-1]:
             self.create_node(node)
             created_node_indexes.append(self.last_added_node_index)
-    
+
         all_nodes_in_segbeam = [first_node] + created_node_indexes + [last_node]
         num_of_nodes = len(all_nodes_in_segbeam)
-    
+
         segbeam_beams = np.array(
             [all_nodes_in_segbeam[index:index+3] for index in range(num_of_nodes)[:-2][::2]]
         )
@@ -177,16 +178,16 @@ class Mesh:
                       node_def,
                       boundary_type: int,
                       removable=True):
-    
+
         '''
         Boundary definition based on boundary type:
         - 1 => x - translation
         - 2 => y - translation
         - 3 => z - rotation
         '''
-    
+
         node_id = self.fetch_near_main_node_index(node_def)
-    
+
         if boundary_type in [1,2,3]:
             if boundary_type == 3:
                 boundary_type = 6
@@ -203,17 +204,16 @@ class Mesh:
     def make_force(self,
                    node_def,
                    force_vec: npt.ArrayLike):
-    
-            '''
+
+        '''
             Force definition based on given node and
             (x_force, y_force) vector
-            '''
-    
-            node_id = self.node_id_or_fetch_node(node_def)
-    
-            force_vec = np.array(force_vec)
-    
-            self.force_list.append((node_id, force_vec))
+        '''
+
+        node_id = self.node_id_or_fetch_node(node_def)
+        force_vec = np.array(force_vec)
+
+        self.force_list.append((node_id, force_vec))
 
     '''
     ---------------------------------------------------------
@@ -230,7 +230,7 @@ class Mesh:
         '''
         Width definition based on the instance of given args
         '''
-    
+
         if isinstance(input_width, float):
             self.segmentedbeam_width_array = np.ones(np.shape(self.segmentedbeam_array)[0]) * input_width
 
@@ -271,12 +271,16 @@ class Mesh:
                 # Boundary removal constraint
                 # Raises an error if it tries to remove most bounderies
 
-                unremovable_boundary = np.unique(np.array([node_id for node_id, _, removable in self.boundary_list if removable == False]))
+                # Can't remove unremovable boundaries
+                unremovable_boundary = np.unique(
+                    np.array(
+                        [node_id for node_id,_,removable in self.boundary_list if removable is False]
+                    )
+                )
 
                 if np.intersect1d(
                         unremovable_boundary,
-                        proposed_beams_left
-                ) == 0:
+                        proposed_beams_left) == 0:
                     raise ValueError('Trying to remove an unremovable boundary!')
 
                 explicit_boundary = np.array(
@@ -288,16 +292,15 @@ class Mesh:
                     proposed_beams_left
                 )
 
-
+                # If only one boundary is left
                 if np.size(bd_left_in_proposed) == 1 and\
                    not np.isin(explicit_boundary[:,1][explicit_boundary[:,0] == int(bd_left_in_proposed)],
                            [1,2,6]).all():
                     raise ValueError('Too many boundaries removed!')
 
-                # TREBA ISPRAVITI OVO S DODAVANJE OVISNOSTI O VRSTI
-                # ZA SAD NEMA VEZE
+                # TODO If only two boundaries are left
                 if np.size(bd_left_in_proposed) < 2:
-                    raise ValueError('Too man boundaries removed!!')
+                    raise ValueError('Too many boundaries removed!!')
 
                 self.current_segmentedbeams = proposed_beams_left
 
