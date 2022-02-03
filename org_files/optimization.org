@@ -1,0 +1,5 @@
+#+TITLE: Optimization
+#+startup: fold
+
+* TODO Bazična optimizacija
+- [ ] Nadodati cilj smanjenja mase / broja greda

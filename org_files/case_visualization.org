@@ -1,0 +1,8 @@
+#+TITLE: Case visualization
+#+startup: fold
+
+- [ ] Vizualizacija optimizacije spremljene u history dokumentima
+- [ ] Prikazati početni i 5 najboljih rezultata
+- [ ] Farbati grede na temelju debljine greda
+- [ ] Prebacivanje između naprezanja u gredama, displacement (generalni uz možda vektorski prikaz smjera), i debljine greda
+- [ ] treba napraviti čianje na temelju try except unutar while True
