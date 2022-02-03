@@ -176,6 +176,7 @@ def run_ccx(filename: str,
     '''
 
     # os.chdir(filename)
+    # napravi Popen.comunicate
     subprocess.call(['ccx', filename], cwd=filename, stdout=subprocess.DEVNULL)
     disp, stress = read_node_displacement_and_stress(filename + '/' + filename)
     # os.chdir('..')

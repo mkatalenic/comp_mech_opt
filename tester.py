@@ -43,6 +43,7 @@ rng = np.random.default_rng()
 my_mesh.minimal_segmentedbeam_width = 0.05
 my_mesh.set_width_array(my_mesh.segmentedbeam_initial_width)
 
+my_mesh.write_to_history()
 # Random vrijednosti
 # NE SMIJE BITI ISTOVREMENO S OPTIMIZACIJOM UKLJUČENO
 # my_mesh.set_width_array(np.random.rand(np.size(my_mesh.segmentedbeam_width_array)))
@@ -59,6 +60,7 @@ def max_translation_error_y_axis(given_width_array,
     disp, _ = cm.run_ccx(current_mesh_filename, del_dir=True)
 
     y_error = float(1/ disp[my_mesh.fetch_near_main_node_index([max_x/2, max_y])][1])
+    my_mesh.write_to_history(optim_res=np.array(y_error))
     # print(y_error)
     # x_error = float(disp[my_mesh.fetch_near_main_node_index([max_x/2, max_y])][0] - 0.0005)
 
@@ -77,7 +79,7 @@ optimizer.safe_evaluation = True
 
 optimizer.objectives = 1
 
-optimizer.monitoring = 'dashboard'
+# optimizer.monitoring = 'dashboard'
 
 optimizer.forward_unique_str = True
 
