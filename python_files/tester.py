@@ -77,8 +77,8 @@ def max_translation_error_y_axsis(given_width_array,
         disp, _ = cm.run_ccx(current_mesh_filename, del_dir=True)
 
         displacement_of_node_in_interest = disp[my_mesh.fetch_near_main_node_index([max_x/2, max_y])]
-        y_error = float(1/displacement_of_node_in_interest[0])
-        x_error = float(displacement_of_node_in_interest[1]) - 0.005
+        y_error = abs(float(1/displacement_of_node_in_interest[0]))
+        x_error = abs(float(displacement_of_node_in_interest[1])) - 0.005
 
         obj_error = y_error
         obj_area  = opt_area
