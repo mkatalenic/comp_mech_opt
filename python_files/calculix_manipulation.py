@@ -43,6 +43,7 @@ def create_calculix_inputfile(used_mesh,
 
         # Node translator
         ccx_input_file.write('*node, nset=nall\n')
+        print(segmentedbeams_to_write)
         ccx_input_file.writelines(
             [f'{i + 1}, {np.array2string(row, separator=",")[1:-1]}\n'
              for i, row in zip(np.unique(segmentedbeams_to_write), used_mesh.node_array[np.unique(segmentedbeams_to_write)])]
@@ -84,19 +85,33 @@ def create_calculix_inputfile(used_mesh,
         ccx_input_file.writelines([f'{node_id+1}, {sup_type}\n' \
                                    for (node_id,sup_type,_) in used_mesh.boundary_list])
 
-        # Force translator
+        # Linear or nonlinear solver
         if nonlin:
-            ccx_input_file.write('*step, nlgeom\n*static\n*cload\n')
+            ccx_input_file.write('*step, nlgeom\n*static\n')
         else:
-            ccx_input_file.write('*step\n*static\n*cload\n')
-        for (node_id, force) in used_mesh.force_list:
-            out_x_force_string = f'{node_id+1}, 1, {force[0]}\n'
-            out_y_force_string = f'{node_id+1}, 2, {force[1]}\n'
-            if force[1] != 0.:
-                ccx_input_file.write(out_y_force_string)
-            if force[0] != 0.:
-                ccx_input_file.write(out_x_force_string)
+            ccx_input_file.write('*step\n*static\n')
 
+        # Initial displacement
+        if np.size(used_mesh.init_disp) > 0:
+            ccx_input_file.write('*boundary\n')
+            for (node_id, displacement) in used_mesh.init_disp:
+                out_x_disp_string = f'{node_id+1}, 1, ,{displacement[0]}\n'
+                out_y_disp_string = f'{node_id+1}, 2, ,{displacement[1]}\n'
+                if displacement[1] != 0.:
+                    ccx_input_file.write(out_y_disp_string)
+                if displacement[0] != 0.:
+                    ccx_input_file.write(out_x_disp_string)
+
+        # Force translator
+        if np.size(used_mesh.force_list) > 0:
+            ccx_input_file.write('*cload\n')
+            for (node_id, force) in used_mesh.force_list:
+                out_x_force_string = f'{node_id+1}, 1, {force[0]}\n'
+                out_y_force_string = f'{node_id+1}, 2, {force[1]}\n'
+                if force[1] != 0.:
+                    ccx_input_file.write(out_y_force_string)
+                if force[0] != 0.:
+                    ccx_input_file.write(out_x_force_string)
 
         ccx_input_file.write('*el print, elset=elall\ns\n')
         ccx_input_file.write('*node file, output=2d, nset=nall\nu\n')
@@ -136,8 +151,14 @@ def read_node_displacement_and_stress(filename: str):
         displacement_list = []
         stress_list = []
 
+        displacement_array = np.empty(shape = (0,3),
+                                      dtype = np.float64)
+        stress_array = np.empty(shape = (0,6),
+                                dtype = np.float64)
+
         in_disp_section = False
         in_stress_section = False
+
         for line in results_file:
 
             if line[5:].startswith('DISP'):
@@ -156,8 +177,16 @@ def read_node_displacement_and_stress(filename: str):
             if in_stress_section:
                 stress_list.append(output_string_formatter(line.strip()[12:]))
 
-    stress_array = np.array(stress_list[7:])
-    displacement_array = np.array(displacement_list[5:])
+    for node in displacement_list:
+        if len(node)>0:
+            displacement_array = np.append(displacement_array,
+                                           np.reshape(np.array(node),(1,3)),
+                                           axis=0)
+    for node in stress_list:
+        if len(node)>0:
+            stress_array = np.append(stress_array,
+                                     np.reshape(np.array(node),(1,6)),
+                                     axis=0)
 
     return displacement_array[:,:-1], stress_array
 
@@ -176,8 +205,11 @@ def run_ccx(filename: str,
     '''
 
     # os.chdir(filename)
-    # napravi Popen.comunicate
-    subprocess.call(['ccx', filename], cwd=filename, stdout=subprocess.DEVNULL)
+    process = subprocess.Popen(['ccx', filename],
+                               cwd=filename,
+                               stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE)
+    out, err = process.communicate()
     disp, stress = read_node_displacement_and_stress(filename + '/' + filename)
     # os.chdir('..')
 

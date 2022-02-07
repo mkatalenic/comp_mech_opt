@@ -42,15 +42,18 @@ if __name__=='__main__':
     my_mesh.make_boundary((max_x,0), 1)
     my_mesh.make_boundary((max_x,0), 2)
 
-    my_mesh.make_boundary((max_x,max_y), 1)
-    my_mesh.make_boundary((max_x,max_y), 2)
+    for node in my_mesh.fetch_nodes_in_area((-0.001, max_y), (max_x, max_y)):
+        my_mesh.make_boundary(node, 1)
+        my_mesh.make_boundary(node, 2)
 
-    my_mesh.make_boundary((0,max_y), 1)
-    my_mesh.make_boundary((0,max_y), 2)
+    # my_mesh.make_boundary((max_x,max_y), 1)
+    # my_mesh.make_boundary((max_x,max_y), 2)
 
+    # my_mesh.make_boundary((0,max_y), 1)
+    # my_mesh.make_boundary((0,max_y), 2)
+    #
     '''Crtanje boundarya'''
     bd_list = np.array(my_mesh.boundary_list)
-    print(my_mesh.main_node_array)
     for node in my_mesh.main_node_array:
         if node in bd_list[:,0]:
             DOF_to_print = str(bd_list[bd_list[:,0]==node][:,1])[1:-1]
