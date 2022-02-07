@@ -399,7 +399,7 @@ class Mesh:
     
         '''Writes the current width array'''
     
-        if not width_array:
+        if isinstance(width_array, bool):
             width_array = self.segmentedbeam_width_array
     
         # Dodavanje 0 kod ne postojećih segmenata
@@ -420,8 +420,6 @@ class Mesh:
             saved_width_hist = np.reshape(
                 np.load('width_history', 'r', allow_pickle=True),
                 (-1,np.size(self.segmentedbeam_width_array)))
-            print(saved_width_hist)
-            print(out_width_array)
             out_width_array = np.reshape(out_width_array,(-1,np.size(out_width_array)))
             out_hist         = np.append(saved_width_hist,
                                          out_width_array,

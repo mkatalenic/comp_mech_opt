@@ -43,7 +43,6 @@ def create_calculix_inputfile(used_mesh,
 
         # Node translator
         ccx_input_file.write('*node, nset=nall\n')
-        print(segmentedbeams_to_write)
         ccx_input_file.writelines(
             [f'{i + 1}, {np.array2string(row, separator=",")[1:-1]}\n'
              for i, row in zip(np.unique(segmentedbeams_to_write), used_mesh.node_array[np.unique(segmentedbeams_to_write)])]
