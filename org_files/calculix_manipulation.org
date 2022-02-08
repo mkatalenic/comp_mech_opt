@@ -81,8 +81,8 @@ def create_calculix_inputfile(used_mesh,
 
         # Boundary translator
         ccx_input_file.write('*boundary\n')
-        ccx_input_file.writelines([f'{node_id+1}, {sup_type}\n' \
-                                   for (node_id,sup_type,_) in used_mesh.boundary_list])
+        ccx_input_file.writelines([f'{int(node_id+1)}, {int(sup_type)}\n' \
+                                   for (node_id,sup_type,_) in used_mesh.boundary_array])
 
         # Linear or nonlinear solver
         if nonlin:
@@ -91,25 +91,25 @@ def create_calculix_inputfile(used_mesh,
             ccx_input_file.write('*step\n*static\n')
 
         # Initial displacement
-        if np.size(used_mesh.init_disp) > 0:
+        if np.size(used_mesh.init_disp_array) > 0:
             ccx_input_file.write('*boundary\n')
-            for (node_id, displacement) in used_mesh.init_disp:
-                out_x_disp_string = f'{node_id+1}, 1, ,{displacement[0]}\n'
-                out_y_disp_string = f'{node_id+1}, 2, ,{displacement[1]}\n'
-                if displacement[1] != 0.:
+            for (node_id, displacement_x, displacement_y) in used_mesh.init_disp_array:
+                out_x_disp_string = f'{int(node_id+1)}, 1, ,{displacement_x}\n'
+                out_y_disp_string = f'{int(node_id+1)}, 2, ,{displacement_y}\n'
+                if displacement_y != 0.:
                     ccx_input_file.write(out_y_disp_string)
-                if displacement[0] != 0.:
+                if displacement_x != 0.:
                     ccx_input_file.write(out_x_disp_string)
 
         # Force translator
-        if np.size(used_mesh.force_list) > 0:
+        if np.size(used_mesh.force_array) > 0:
             ccx_input_file.write('*cload\n')
-            for (node_id, force) in used_mesh.force_list:
-                out_x_force_string = f'{node_id+1}, 1, {force[0]}\n'
-                out_y_force_string = f'{node_id+1}, 2, {force[1]}\n'
-                if force[1] != 0.:
+            for (node_id, force_x, force_y) in used_mesh.force_array:
+                out_x_force_string = f'{int(node_id+1)}, 1, {force_x}\n'
+                out_y_force_string = f'{int(node_id+1)}, 2, {force_y}\n'
+                if force_y != 0.:
                     ccx_input_file.write(out_y_force_string)
-                if force[0] != 0.:
+                if force_x != 0.:
                     ccx_input_file.write(out_x_force_string)
 
         ccx_input_file.write('*el print, elset=elall\ns\n')

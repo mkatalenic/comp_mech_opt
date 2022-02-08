@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import pickle
+from os.path import exists
 import numpy as np
 import random
 
@@ -45,24 +47,44 @@ my_mesh.minimal_segmentedbeam_width = 0.05
 my_mesh.set_width_array(my_mesh.segmentedbeam_initial_width)
 my_mesh.write_beginning_state()
 
-'''
-for i in range(20):
-    my_mesh.set_width_array(np.random.random(np.size(my_mesh.segmentedbeam_width_array)) * my_mesh.segmentedbeam_initial_width)
-    my_mesh.save_width_array()
-
-    # Prijevod konstrukcije u Calculix input
-    current_mesh_filename = cm.create_calculix_inputfile(my_mesh,
-                                                         filename=f'probni_{random.randrange(2000,5000)}',
-                                                         nonlin=True)
-    # Pokretanje Calculixa
-    displacement, stress = cm.run_ccx(current_mesh_filename)
-
-    # Uzima se samo posljednji step
-    displacement_last = displacement[-np.size(np.unique(my_mesh.current_segmentedbeams)):]
-    stress_last = stress[-np.size(np.unique(my_mesh.current_segmentedbeams)):]
-'''
+# with open('case_setup.pkl', 'rb') as iof:
+#     my_mesh = pickle.load(iof)
+#
+# my_mesh.set_width_array(np.random.random(np.size(my_mesh.segmentedbeam_width_array)) * my_mesh.segmentedbeam_initial_width)
+# # my_mesh.save_width_array()
+#
+# # Prijevod konstrukcije u Calculix input
+# current_mesh_filename = cm.create_calculix_inputfile(my_mesh,
+                                                     # filename=f'probni_{random.randrange(2000,5000)}',
+                                                     # nonlin=True)
+# # Pokretanje Calculixa
+# displacement, stress = cm.run_ccx(current_mesh_filename)
+#
+# # Uzima se samo posljednji step
+# displacement_last = displacement[-np.size(np.unique(my_mesh.current_segmentedbeams)):]
+# stress_last = stress[-np.size(np.unique(my_mesh.current_segmentedbeams)):]
 
 '''Proba optimizacije'''
+def save_result(*args):
+    array_to_save = np.array([[args]])
+
+    if exists('./optimization_results'):
+        saved_optim_res = np.reshape(
+            np.load('optimization_results', 'r', allow_pickle=True),
+            (-1,np.size(args)))
+
+        out_res = np.append(saved_optim_res,
+                            array_to_save,
+                            axis=0)
+    else:
+        out_res = array_to_save
+
+    with open('optimization_results', 'wb') as optim_res_file:
+        np.save(optim_res_file,
+                out_res,
+                allow_pickle=True)
+
+
 def max_translation_error_y_axsis(given_width_array,
                                   unique_srt=None):
 
@@ -85,6 +107,7 @@ def max_translation_error_y_axsis(given_width_array,
         constraint = x_error
 
         my_mesh.save_width_array(width)
+        save_result(obj_error, obj_area, constraint)
 
         return obj_error, obj_area, constraint
     except:
@@ -112,10 +135,10 @@ optimizer.constraints = 1
 optimizer.constraint_labels = ['Max x translation']
 
 optimizer.safe_evaluation = False
-optimizer.eval_fail_behavior = 'ignore'
+optimizer.eval_fail_behavior = 'retry'
 # optimizer.eval_retry_attempts = 3
 
-optimizer.monitoring = 'basic'
+optimizer.monitoring = 'dashboard'
 
 optimizer.forward_unique_str = True
 result = optimizer.optimize()

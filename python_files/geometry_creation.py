@@ -7,6 +7,7 @@ import numpy as np
 import numpy.typing as npt
 
 import pickle
+from os.path import exists
 
 class Mesh:
 
@@ -73,9 +74,14 @@ class Mesh:
     segmentedbeam_height: float
     
     # Lists containing mesh boundaries, external forces and initial displacements
-    boundary_list: list[tuple[int, int]] = []
-    force_list:    list[tuple[int, npt.NDArray]] = []
-    init_disp:     list[tuple[int, npt.NDArray]] = []
+    boundary_array = np.empty(shape=(0,3),
+                              dtype=np.int64)
+    
+    force_array = np.empty(shape=(0,3),
+                           dtype=np.float64)
+    
+    init_disp_array = np.empty(shape=(0,3),
+                               dtype=np.float64)
 
     '''
     ---------------------------------------------------------
@@ -208,7 +214,7 @@ class Mesh:
     def make_boundary(self,
                       node_def,
                       boundary_type: int,
-                      removable=True):
+                      removable=1):
     
         '''
         Boundary definition based on boundary type:
@@ -222,7 +228,11 @@ class Mesh:
         if boundary_type in [1,2,3]:
             if boundary_type == 3:
                 boundary_type = 6
-            self.boundary_list.append((node_id, boundary_type, removable))
+            self.boundary_array = np.append(
+                self.boundary_array,
+                [[node_id, boundary_type, int(removable)]],
+                axis = 0
+            )
         else:
             raise ValueError
 
@@ -244,7 +254,11 @@ class Mesh:
         node_id = self.node_id_or_fetch_node(node_def)
         force_vec = np.array(force_vec)
     
-        self.force_list.append((node_id, force_vec))
+        self.force_array = np.append(
+            self.force_array,
+            [[node_id, force_vec[0], force_vec[1]]],
+            axis = 0
+        )
 
     '''
     ---------------------------------------------------------
@@ -263,7 +277,11 @@ class Mesh:
         node_id = self.node_id_or_fetch_node(node_def)
         movement_vec = np.array(movement_vec)
     
-        self.init_disp.append((node_id, movement_vec))
+        self.init_disp_array = np.append(
+            self.init_disp_array,
+            [[node_id, movement_vec[0], movement_vec[1]]],
+            axis = 0
+        )
 
     '''
     ---------------------------------------------------------
@@ -288,7 +306,7 @@ class Mesh:
                 length = np.sqrt(dx**2+dy**2)
                 self.segmentedbeam_length_array = np.append(self.segmentedbeam_length_array,
                                                             length)
-            self.mechanism_area = self.segmentedbeam_width_array * self.segmentedbeam_length_array
+            self.mechanism_area = np.sum(self.segmentedbeam_width_array * self.segmentedbeam_length_array)
     
         else:
             if np.size(input_width) == np.shape(self.segmentedbeam_array)[0]:
@@ -319,9 +337,9 @@ class Mesh:
                 if np.size(
                         np.intersect1d(
                             proposed_beams_left,
-                            np.array([node_id for node_id, _ in self.force_list])
+                            np.array([node_id for node_id, _, _ in self.force_array])
                         )
-                ) == 0 and np.size(self.force_list)!=0:
+                ) == 0 and np.size(self.force_array)!=0:
                     raise ValueError('Trying to remove a force!')
     
                 # Initial displacement removal constraint
@@ -330,9 +348,9 @@ class Mesh:
                 if np.size(
                         np.intersect1d(
                             proposed_beams_left,
-                            np.array([node_id for node_id, _ in self.init_disp])
+                            np.array([node_id for node_id, _, _ in self.init_disp_array])
                         )
-                ) == 0:
+                ) == 0 and np.size(self.init_disp_array)!=0:
                     raise ValueError('Trying to remove a node with initial displacement!')
     
                 # Boundary removal constraint
@@ -341,7 +359,7 @@ class Mesh:
                 # Can't remove unremovable boundaries
                 unremovable_boundary = np.unique(
                     np.array(
-                        [node_id for node_id,_,removable in self.boundary_list if removable is False]
+                        [node_id for node_id,_,removable in self.boundary_array if removable == 0]
                     )
                 )
     
@@ -351,7 +369,7 @@ class Mesh:
                     raise ValueError('Trying to remove an unremovable boundary!')
     
                 explicit_boundary = np.array(
-                    [[node_id, bound_def]  for node_id, bound_def, _ in self.boundary_list]
+                    [[node_id, bound_def]  for node_id, bound_def, _ in self.boundary_array]
                 )
     
                 bd_left_in_proposed = np.intersect1d(
@@ -391,8 +409,8 @@ class Mesh:
     
         '''Writes beginning state of the construction'''
     
-        with open('case_setup', 'wb') as case_setup:
-            pickle.dump(self, case_setup)
+        with open('case_setup.pkl', 'wb') as case_setup:
+            pickle.dump(self, case_setup, pickle.HIGHEST_PROTOCOL)
     
     def save_width_array(self,
                          width_array = False):
@@ -415,7 +433,6 @@ class Mesh:
     
             out_width_array = np.append(out_width_array, add_to_out)
     
-        from os.path import exists
         if exists('./width_history'):
             saved_width_hist = np.reshape(
                 np.load('width_history', 'r', allow_pickle=True),
