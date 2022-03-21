@@ -1,7 +1,5 @@
-#+TITLE: Case visualization
-#+startup: fold
+#!/usr/bin/env python3
 
-#+begin_src python
 import random
 import pickle
 import matplotlib.pyplot as plt
@@ -96,4 +94,3 @@ for init_disp in my_mesh.init_disp_array:
              )
 
 plt.savefig('primjer_mesh.jpg', dpi=150)
-#+end_src

@@ -3,11 +3,10 @@
 Mesh creation definitions
 '''
 
-import numpy as np
-import numpy.typing as npt
-
 import pickle
 from os.path import exists
+
+import numpy as np
 
 class Mesh:
 
@@ -68,7 +67,7 @@ class Mesh:
     mechanism_area: float
     
     # Array with T/F for existance of segmentbeam
-    truth_array: npt.NDArray
+    truth_array: np.ndarray
     
     # The height of the 2D beam construction
     segmentedbeam_height: float
@@ -90,7 +89,7 @@ class Mesh:
     '''
 
     def fetch_near_main_node_index(self,
-                                   coords: npt.ArrayLike) -> int:
+                                   coords) -> int:
         '''Fetches node index based on near coordinates'''
     
         coords = np.array(coords)
@@ -113,15 +112,15 @@ class Mesh:
         Either forward given id or fetch the nearest node
         Checks the instance.
         '''
-        if  isinstance(node_def, int) or isinstance(node_def, np.int64):
+        if  isinstance(node_def, (int, np.int64)):
             node_id = node_def
         else:
             node_id = self.fetch_near_main_node_index(node_def)
         return node_id
     
     def fetch_nodes_in_area(self,
-                            down_left_coord: tuple[float, float],
-                            up_right_coord:  tuple[float, float]) -> npt.NDArray:
+                            down_left_coord: tuple,
+                            up_right_coord:  tuple) -> np.ndarray:
     
         '''Fetches all nodes in the area'''
     
@@ -145,7 +144,7 @@ class Mesh:
     '''
 
     def create_node(self,
-                    coords: npt.ArrayLike):
+                    coords):
         '''
         Node creation method.
         Created nodes are added to the self.node_array.
@@ -157,7 +156,7 @@ class Mesh:
         self.last_added_node_index += 1
     
     def create_main_node(self,
-                         coords: npt.ArrayLike):
+                         coords):
         '''
         Simoultanious node creation
         and
@@ -244,7 +243,7 @@ class Mesh:
 
     def make_force(self,
                    node_def,
-                   force_vec: npt.ArrayLike):
+                   force_vec):
     
         '''
         Force definition based on given node and
@@ -268,7 +267,7 @@ class Mesh:
 
     def move_node(self,
                   node_def,
-                  movement_vec: npt.ArrayLike):
+                  movement_vec):
         '''
         Initial node displacement:
         movement_def = [x_movement, y_movement]
@@ -320,7 +319,7 @@ class Mesh:
                     return_counts=True
                 )
     
-                _, main_nodes_count = np.unique(
+                main_nodes, main_nodes_count = np.unique(
                     self.segmentedbeam_array[:, [0, -1], [0, -1]],
                     return_counts = True
                 )
@@ -328,7 +327,7 @@ class Mesh:
                 # Lonely node constraint
                 # A main node cannot have only one beam conected to it
     
-                if 1 in main_nodes_count[removed_main_nodes] - removed_main_nodes_count:
+                if 1 in main_nodes_count[np.isin(main_nodes,removed_main_nodes)] - removed_main_nodes_count:
                     raise ValueError('Lonely node alert!')
     
                 # Force removal constraint
@@ -363,9 +362,9 @@ class Mesh:
                     )
                 )
     
-                if np.intersect1d(
-                        unremovable_boundary,
-                        proposed_beams_left) == 0:
+                if np.size(np.intersect1d(
+                    unremovable_boundary,
+                    proposed_beams_left)) == 0:
                     raise ValueError('Trying to remove an unremovable boundary!')
     
                 explicit_boundary = np.array(
@@ -381,20 +380,21 @@ class Mesh:
                 if np.size(bd_left_in_proposed) == 1 and\
                    not np.isin(explicit_boundary[:,1][explicit_boundary[:,0] == int(bd_left_in_proposed)],
                            [1,2,6]).all():
-                    raise ValueError('Too many boundaries removed!')
+                    raise ValueError('One boundary left!')
     
                 # TODO If only two boundaries are left
                 if np.size(bd_left_in_proposed) < 2:
                     raise ValueError('Too many boundaries removed!!')
     
-                self.current_segmentedbeams = proposed_beams_left
                 self.truth_array = [np.alltrue(node) for node in np.isin(self.segmentedbeam_array,
-                                                                         self.current_segmentedbeams)]
+                                                                         proposed_beams_left)]
     
+                self.current_segmentedbeams = self.segmentedbeam_array[list(self.truth_array)]
                 calc_length_array = self.segmentedbeam_length_array[list(self.truth_array)]
                 calc_width_array  = self.segmentedbeam_width_array[list(self.truth_array)]
                 self.mechanism_area = np.sum(calc_width_array * calc_length_array)
     
+                self.segmentedbeam_width_array = self.segmentedbeam_width_array * self.truth_array
             else:
                 raise ValueError('Wrong array size!')
     
@@ -466,7 +466,7 @@ class SimpleMeshCreator(Mesh):
     def __init__(self,
                  length: float,
                  height: float,
-                 divisions: tuple[int, int],
+                 divisions: tuple,
                  support_definition: str = None):
         '''
         Initialization

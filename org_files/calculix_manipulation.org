@@ -16,9 +16,6 @@ import shutil
 
 # Numpy
 import numpy as np
-
-# Geometry creation
-import geometry_creation as gc
 #+end_src
 
 * Calculix manipulator
@@ -37,7 +34,7 @@ def create_calculix_inputfile(used_mesh,
     os.mkdir(filename)
 
     segmentedbeams_to_write = used_mesh.current_segmentedbeams
-    segmentedbeam_widths_to_write = used_mesh.segmentedbeam_width_array
+    segmentedbeam_widths_to_write = used_mesh.segmentedbeam_width_array[list(used_mesh.truth_array)]
 
     with open(filename + '/' + filename + '.inp', 'w', encoding='ascii') as ccx_input_file:
 
@@ -192,21 +189,27 @@ def read_node_displacement_and_stress(filename: str):
 #+name: calculix_runner
 #+begin_src python
 def run_ccx(filename: str,
-            del_dir: bool = False):
+            del_dir: bool = False,
+            no_threads: int = 1):
 
     '''
     Calculix runner
     Outputs displacement and stress lists
     '''
 
-    # os.chdir(filename)
-    process = subprocess.Popen(['ccx', filename],
-                               cwd=filename,
-                               stdout=subprocess.PIPE,
-                               stderr=subprocess.PIPE)
-    out, err = process.communicate()
-    disp, stress = read_node_displacement_and_stress(filename + '/' + filename)
-    # os.chdir('..')
+    ccx = 'ccx_2.19'
+
+    if no_threads != 1:
+        ccx+='_MT'
+        if os.getenv('OMP_NUM_THREADS') == None or int(os.getenv('OMP_NUM_THREADS')) != no_threads:
+            os.environ['OMP_NUM_THREADS'] = str(no_threads)
+
+    with subprocess.Popen([ccx, filename],
+                          cwd=filename,
+                          stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE) as process:
+        out, err = process.communicate()
+        disp, stress = read_node_displacement_and_stress(filename + '/' + filename)
 
     if del_dir:
         shutil.rmtree(filename)

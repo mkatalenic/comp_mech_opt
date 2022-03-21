@@ -3,3 +3,26 @@
 
 * TODO Bazična optimizacija
 - [ ] Nadodati cilj smanjenja mase / broja greda
+
+
+* Imports
+#+name: imports
+#+begin_src python
+import numpy as np
+#+end_src
+
+* History
+#+name: history_method
+#+begin_src python
+
+def save_opt_results_to_hist(result_array)
+
+#+end_src
+
+* OUTPUT_TO_FILE :noexport:
+
+#+name: optimization_file
+#+begin_src python :noweb yes :tangle ../python_files/optimization.py :shebang #!/usr/bin/env python3
+
+<<imports>>
+#+end_src
